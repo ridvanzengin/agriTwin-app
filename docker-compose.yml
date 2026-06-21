@@ -1,0 +1,37 @@
+services:
+  db:
+    image: timescale/timescaledb-ha:pg16
+    environment:
+      POSTGRES_USER: agritwin
+      POSTGRES_PASSWORD: agritwin
+      POSTGRES_DB: agritwin
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./.pgdata:/home/postgres/pgdata
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agritwin -d agritwin"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  web:
+    build:
+      # Build context is the parent directory so both repos are reachable.
+      # Dockerfile COPYs the ETL source (not its data/) into the image;
+      # only the large Parquet data files are volume-mounted at runtime.
+      context: ..
+      dockerfile: agriTwin-app/Dockerfile
+    ports:
+      - "5001:5000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://agritwin:agritwin@db:5432/agritwin
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:-dev-secret-change-in-production}
+      FLASK_DEBUG: "false"
+    volumes:
+      # Only the Parquet data files are mounted — the ETL source is baked into
+      # the image at build time (see Dockerfile), so no write access is needed.
+      - ../agriTwin-etl/data/processed:/agritwin-etl/data/processed:ro
+    depends_on:
+      db:
+        condition: service_healthy
