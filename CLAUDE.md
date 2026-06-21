@@ -21,7 +21,7 @@ AgriTwin's web application. A Flask + MapLibre tool that reads from the PostgreS
 - MapLibre GL JS loaded from CDN — no npm, no build step
 - Vanilla JS + Fetch API for all interactivity
 - PostgreSQL + PostGIS + TimescaleDB (populated by `agritwin-etl`)
-- Docker Compose for local Postgres (Flask itself runs via `flask run`)
+- Docker Compose (four services: db, migrate, web, loader — one command starts everything)
 - pytest
 
 ## Key architecture decisions (already made — don't relitigate without discussion)
@@ -52,7 +52,10 @@ Both repos share the same PostgreSQL database. `agritwin-etl` occupies the defau
 ```
 agritwin-app/
   pyproject.toml
-  docker-compose.yml           # Postgres with PostGIS + TimescaleDB (same image as agritwin-etl)
+  docker-compose.yml           # Four services: db, migrate, web, loader
+  Dockerfile                   # Build context is ..; bakes in ETL source, mounts data/ at runtime
+  migrate.sh                   # Runs both Alembic chains (ETL + app), then exits
+  load.sh                      # Bulk-loads all Parquet tables in FK-safe order, then exits
   .env.example
   alembic/
     env.py                     # version_table = "alembic_version_app"
@@ -87,75 +90,70 @@ agritwin-app/
 
 ## Local development setup
 
-### Python environment
+### Option A: Docker (recommended)
+
+Both repos must be siblings under the same parent directory (`~/personal/agriTwin-app/` and `~/personal/agriTwin-etl/`). The Dockerfile build context is `..` (the parent), and the loader service volume-mounts `../agriTwin-etl/data/processed`.
+
+```bash
+cp .env.example .env             # set FLASK_SECRET_KEY (any string for local dev)
+docker compose up --build -d
+```
+
+This starts four services in dependency order:
+
+| Service | What it does | Exits? |
+|---|---|---|
+| `db` | PostgreSQL + PostGIS + TimescaleDB on port 5433 | stays up |
+| `migrate` | Applies both Alembic chains (ETL's + this app's), then exits | yes |
+| `web` | Flask app on port 5001 (starts after `migrate`) | stays up |
+| `loader` | Bulk-loads all Parquet data (~5–10 min via COPY FROM STDIN), then exits | yes |
+
+Flask is available at **http://localhost:5001** while the loader runs — the map appears immediately and data fills in as tables load.
+
+```bash
+docker compose logs -f loader   # watch data load
+docker compose logs -f web      # watch Flask startup
+```
+
+### Option B: Host flask run (for fast iteration on templates/JS)
+
+Requires the DB to already be running and seeded (run Option A first, then stop the `web` container).
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"          # installs Flask, SQLAlchemy, alembic, pytest, etc.
-```
-
-The venv is at `.venv/` (gitignored). Always activate before running Flask or pytest.
-
-### Running the app
-
-```bash
-cp .env.example .env             # fill in FLASK_SECRET_KEY
-source .venv/bin/activate
+pip install -e ".[dev]"
+cp .env.example .env             # set DATABASE_URL and FLASK_SECRET_KEY
 flask --app agritwin_app run --debug
 ```
 
-### Database setup
+The venv is at `.venv/` (gitignored). Always activate before running `flask` or `pytest`.
 
-The schema and data are produced by `agritwin-etl` (repo at `~/personal/agritwin-etl`).
-Run all commands **from the ETL repo directory** — alembic uses relative `script_location`.
+### Re-seeding from scratch
 
-```bash
-# 1. Start Postgres
-docker compose up -d
+If you need to wipe and reload all data:
 
-# 2. Activate this repo's venv (agritwin-etl is installed into it)
-source .venv/bin/activate
-
-# 3. Install agritwin-etl into the same venv
-pip install -e ~/personal/agritwin-etl
-
-# 4. Enable PostGIS (one-time; timescaledb is already enabled by the image)
-docker exec agritwin-app-db-1 psql -U agritwin -d agritwin \
-  -c "CREATE EXTENSION IF NOT EXISTS postgis;"
-
-# 5. Run ETL schema migrations (must run from ETL repo dir)
-cd ~/personal/agritwin-etl
-DATABASE_URL=postgresql+psycopg://agritwin:agritwin@localhost:5433/agritwin \
-  alembic upgrade head
-
-# 6. Load all processed Parquet data (~20–40 min for 163M rows)
-DATABASE_URL=postgresql+psycopg://agritwin:agritwin@localhost:5433/agritwin \
-  agritwin-etl db-load
-
-# 7. Run this app's own Alembic chain (no-op in Phase 2)
-cd ~/personal/agritwin-app
-alembic upgrade head
+```sql
+TRUNCATE data_source, feature, crop, spatial_cell, crop_requirement,
+         crop_statistics, commodity_price, production_cost CASCADE
+RESTART IDENTITY;
 ```
 
-Steps 3–6 are one-time setup. Step 7 runs whenever this repo adds a new migration.
+Then `docker compose up -d` — the loader is idempotent (skips tables that already have rows).
 
-> **If you need to re-run db-load from scratch**, truncate with sequence reset so auto-increment IDs stay consistent:
-> ```sql
-> TRUNCATE data_source, feature, crop, spatial_cell, crop_requirement,
->          crop_statistics, commodity_price, production_cost CASCADE
-> RESTART IDENTITY;
-> ```
 > Plain `TRUNCATE ... CASCADE` (without `RESTART IDENTITY`) leaves sequences advanced,
 > so re-inserted rows get IDs that don't match what subsequent FK-joining tables expect.
 
 ### Known agritwin-etl bugs fixed (already patched in that repo)
 
-These bugs were found and fixed during the first Phase 2 session — do **not** re-apply:
+These bugs were found and fixed during Phase 2 — do **not** re-apply:
 
 | File | Fix |
 |---|---|
-| `db/load.py` | Added `_load_data_source()` — casts `download_date` string → Python `date` |
+| `db/load.py` | `_load_data_source()` — casts `download_date` string → Python `date`; idempotent (skips existing names) |
+| `db/load.py` | `_load_observation_files()` — COPY FROM STDIN (10–30× faster than row-by-row insert) |
+| `db/load.py` | `_load_production_cost()` — date cast for `effective_date` |
+| `db/load.py` | `_load_spatial_cell()` — batched executemany (1000/batch), WKT as bound param |
 | `store/parquet.py` | Per-file read (avoids cross-file schema crash); strips tz-aware timestamps; converts string timestamp columns to `datetime64[ns]` |
 | `data/processed/data_source/data.parquet` | Added missing `FAOSTAT`, `FAOSTAT-PP`, `TAGEM` source rows |
 
@@ -187,18 +185,20 @@ docker-compose up -d
 pytest
 ```
 
-## Phase 2 definition of done
+## Phase 2 definition of done — COMPLETE ✅
 
-- [ ] `flask run` starts the dev server; `GET /` returns a Jinja2-rendered page with a MapLibre map centered on Konya Province (lon 32.5, lat 38.0, zoom 9)
-- [ ] `GET /api/cells?bbox=w,s,e,n` returns a GeoJSON FeatureCollection of cells in the viewport
-- [ ] `GET /api/cells?bbox=...&feature=ndvi` adds `value` + `value_unit` to each cell's properties
-- [ ] Cells render as a polygon fill layer on the map, colored by a default feature (elevation)
-- [ ] A feature selector dropdown switches the color layer (elevation, ndvi, temperature_2m, soil_ph_0-5cm)
-- [ ] Clicking a cell opens a sidebar showing: elevation/slope/aspect, latest value per feature, NDVI timeseries chart, monthly temperature + precipitation chart
-- [ ] `GET /api/cells/<h3_id>` returns the full cell profile as JSON
-- [ ] `GET /api/cells/<h3_id>/timeseries?feature=ndvi` returns timestamped values as JSON
-- [ ] `GET /api/features` returns the feature list
-- [ ] pytest suite covers all API endpoints
+All 18 pytest tests pass. Verified end-to-end against the fully-loaded DB.
+
+- [x] `flask run` starts the dev server; `GET /` returns a Jinja2-rendered page with a MapLibre map centered on Konya Province (lon 32.5, lat 38.0, zoom 9)
+- [x] `GET /api/cells?bbox=w,s,e,n` returns a GeoJSON FeatureCollection of cells in the viewport
+- [x] `GET /api/cells?bbox=...&feature=ndvi` adds `value` + `value_unit` to each cell's properties
+- [x] Cells render as a polygon fill layer on the map, colored by a default feature (elevation)
+- [x] A feature selector dropdown switches the color layer (elevation, ndvi, temperature_2m, soil_ph_0-5cm)
+- [x] Clicking a cell opens a sidebar showing: elevation/slope/aspect, latest value per feature, NDVI timeseries chart, monthly temperature + precipitation chart
+- [x] `GET /api/cells/<h3_id>` returns the full cell profile as JSON
+- [x] `GET /api/cells/<h3_id>/timeseries?feature=ndvi` returns timestamped values as JSON
+- [x] `GET /api/features` returns the feature list
+- [x] pytest suite covers all API endpoints (18 tests)
 
 ## Things to avoid
 

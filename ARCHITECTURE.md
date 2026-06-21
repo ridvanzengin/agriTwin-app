@@ -7,18 +7,66 @@ Browser
   │
   │  HTTP
   ▼
-Flask (agritwin-app)
+Flask (agritwin-app)  ─── port 5001 (Docker) / 5000 (host)
   ├── GET /                → views/map.py → Jinja2 map.html
   └── GET /api/*           → api/cells.py, api/features.py → JSON / GeoJSON
             │
             │  SQLAlchemy + GeoAlchemy2
             ▼
-PostgreSQL + PostGIS + TimescaleDB
+PostgreSQL + PostGIS + TimescaleDB  ─── port 5433
   ├── ETL tables (agritwin-etl owns, migrations): spatial_cell, observation, feature, crop, …
   └── App tables (agritwin-app owns, migrations): scenario, suitability_score, …  [Phase 3+]
 ```
 
 No external services are called at query time. All data is pre-loaded into PostgreSQL by `agritwin-etl db-load`. Phase 2 reads only.
+
+## Docker service architecture
+
+`docker compose up --build -d` starts four services in dependency order:
+
+```
+db (healthy?)
+    │
+    ▼
+migrate  ──────────────────┐
+ (runs both Alembic chains, │
+  then exits)               │
+    │                       │
+    ├──────────────┐        │
+    ▼              ▼        │
+   web           loader     │
+(Flask, stays  (COPY FROM   │
+   up)          STDIN, exits)
+```
+
+| Service | Image | Purpose | Exit? |
+|---|---|---|---|
+| `db` | `timescale/timescaledb-ha:pg16` | PostgreSQL + PostGIS + TimescaleDB | stays up |
+| `migrate` | built from `Dockerfile` | Runs ETL Alembic chain, then app Alembic chain | exits 0 |
+| `web` | built from `Dockerfile` | Flask app, waits for `migrate` to succeed | stays up |
+| `loader` | built from `Dockerfile` | Bulk-loads all Parquet tables via COPY FROM STDIN | exits 0 |
+
+`web` and `loader` both depend on `migrate: condition: service_completed_successfully`, so they never start against an unschema'd database. The Flask app is usable immediately after `migrate` finishes — the map renders with whatever data has loaded so far.
+
+### Build context and volumes
+
+The Dockerfile `build: context: ..` (parent of both repos) so the image can bake in the ETL source:
+
+```dockerfile
+COPY agriTwin-etl/agritwin_etl  /agritwin-etl/agritwin_etl
+COPY agriTwin-etl/alembic       /agritwin-etl/alembic
+# …
+COPY agriTwin-app/. /app
+```
+
+Only `data/processed/` (the Parquet files, ~several GB) is volume-mounted at runtime — not baked in, to keep image size manageable:
+
+```yaml
+volumes:
+  - ../agriTwin-etl/data/processed:/agritwin-etl/data/processed:ro
+```
+
+This means both repos must be siblings under the same parent directory for `docker compose up` to work.
 
 ## Map rendering
 
@@ -70,10 +118,13 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) lat ON true
 LEFT JOIN feature f ON f.name = :feature_name
-WHERE sc.geometry && ST_MakeEnvelope(:west, :south, :east, :north, 4326);
+WHERE sc.geometry && ST_MakeEnvelope(:west, :south, :east, :north, 4326)
+  AND sc.resolution = 9;   -- exclude ERA5-Land res-6 parent cells
 ```
 
 When `feature_name` is not supplied, omit the `LATERAL` and `feature` joins.
+
+**Terrain features exception:** `elevation`, `slope`, and `aspect` are stored directly in `spatial_cell`, not in `observation`. When `feature_name` is one of these, the query reads `sc.elevation` / `sc.slope` / `sc.aspect` directly and skips the `LATERAL` subquery entirely. This is handled via a `TERRAIN_FEATURES` dict in `api/cells.py`.
 
 ### Full environmental profile for one cell
 

@@ -6,9 +6,22 @@ These tables are created and migrated by `agritwin-etl`. This repo reads them vi
 
 | Table | What it holds | Phase 2 use |
 |---|---|---|
-| `spatial_cell` | 346,787 H3 res-9 cells; h3_id, geometry, elevation, slope, aspect | bbox query, cell profile |
+| `spatial_cell` | H3 cells; h3_id, geometry, elevation, slope, aspect, resolution | bbox query, cell profile |
 | `feature` | One row per measurable variable (name, category, unit) | feature list, label lookup |
-| `observation` | 163.7M rows: (h3_id, feature_id, timestamp, value) — TimescaleDB hypertable | latest values, timeseries |
+| `observation` | 29.5M rows: (h3_id, feature_id, timestamp, value) — TimescaleDB hypertable | latest values, timeseries |
+
+### spatial_cell — resolution column
+
+`spatial_cell` contains cells at two H3 resolutions:
+
+| resolution | count | source |
+|---|---|---|
+| 9 | 346,787 | MODIS, SoilGrids (actual observation cells) |
+| 6 | ~7,000 | ERA5-Land parent cells (one per ~50km² ERA5 grid square) |
+
+ERA5-Land weather data (temperature, precipitation, etc.) is ingested at H3 res-6 because that matches ERA5's native ~9 km resolution. The `observation.h3_id` FK references `spatial_cell.h3_id` for both resolutions.
+
+All map-display queries filter `AND sc.resolution = 9` to show only the fine-grained cells. ERA5 observations for a res-6 cell can still be fetched via `GET /api/cells/<h3_id>/timeseries` by passing a res-6 `h3_id` directly.
 | `crop` | 8 crops: wheat, barley, sugar beet, sunflower, maize, chickpea, lentil, cotton | Phase 3+ |
 | `crop_requirement` | Agronomic min/optimal/max/weight per feature per crop | Phase 3+ |
 | `crop_statistics` | FAOSTAT annual yield/harvest area/production, Turkey 2000–2023 | Phase 5+ |

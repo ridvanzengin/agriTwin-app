@@ -2,16 +2,11 @@
 {% block title %}Monitoring — AgriTwin{% endblock %}
 
 {% block content %}
-<!-- Feature selector toolbar -->
-<div class="map-toolbar">
-  <label for="feature-select" class="toolbar-label">Color by</label>
-  <select id="feature-select" class="toolbar-select">
-    <option value="elevation">Elevation</option>
-    <option value="ndvi">NDVI</option>
-    <option value="temperature_2m">Temperature (2m)</option>
-    <option value="soil_ph_0-5cm">Soil pH (0–5cm)</option>
-  </select>
-</div>
+<!-- Theme toggle -->
+<button id="theme-toggle" class="map-theme-toggle" aria-label="Toggle map theme"></button>
+
+<!-- Current resolution badge (bottom-left, above scale control) -->
+<div id="resolution-badge" class="map-resolution-badge"></div>
 
 <!-- Map container -->
 <div id="map"></div>
@@ -19,55 +14,93 @@
 <!-- Hover tooltip -->
 <div id="map-tooltip" class="map-tooltip" hidden></div>
 
-<!-- Cell detail panel (right sidebar) -->
+<!-- Cell detail panel: shown only after a cell is clicked -->
 <aside id="cell-panel" class="cell-panel" hidden aria-label="Cell detail">
-  <div class="panel-header">
-    <div class="panel-title-group">
-      <h2 class="panel-title">Cell Detail</h2>
-      <code id="panel-h3id" class="panel-h3id"></code>
+
+  <!-- Drag-to-resize handle on left edge of panel -->
+  <div id="panel-resize-handle" class="panel-resize-handle"></div>
+
+  <!-- Sticky top: header + tab row -->
+  <div class="panel-sticky-top">
+    <div class="panel-header">
+      <div class="panel-title-group">
+        <h2 class="panel-title">Cell Detail</h2>
+        <code id="panel-h3id" class="panel-h3id"></code>
+      </div>
+      <button id="panel-close" class="panel-close" aria-label="Close panel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
     </div>
-    <button id="panel-close" class="panel-close" aria-label="Close panel">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-        <line x1="18" y1="6" x2="6" y2="18"/>
-        <line x1="6" y1="6" x2="18" y2="18"/>
-      </svg>
-    </button>
-  </div>
-
-  <!-- Static attributes card -->
-  <div class="panel-card">
-    <h3 class="panel-card-title">Terrain</h3>
-    <dl class="attr-grid">
-      <dt>Elevation</dt><dd id="attr-elevation">—</dd>
-      <dt>Slope</dt><dd id="attr-slope">—</dd>
-      <dt>Aspect</dt><dd id="attr-aspect">—</dd>
-    </dl>
-  </div>
-
-  <!-- Latest values by category -->
-  <div id="panel-features" class="panel-card">
-    <h3 class="panel-card-title">Latest Observations</h3>
-    <div id="feature-groups"></div>
-  </div>
-
-  <!-- Charts -->
-  <div class="panel-card">
-    <h3 class="panel-card-title">NDVI History</h3>
-    <div class="chart-wrap">
-      <canvas id="chart-ndvi"></canvas>
+    <div class="panel-tabs" role="tablist">
+      <button class="panel-tab active" data-tab="latest" role="tab">Latest</button>
+      <button class="panel-tab"        data-tab="historic" role="tab">Historic</button>
     </div>
   </div>
 
-  <div class="panel-card">
-    <h3 class="panel-card-title">Temperature &amp; Precipitation</h3>
-    <div class="chart-wrap">
-      <canvas id="chart-weather"></canvas>
-    </div>
-  </div>
+  <!-- Scrollable body -->
+  <div class="panel-body">
+
+    <!-- Latest tab -->
+    <div class="panel-tab-content active" id="tab-latest">
+
+      <!-- Terrain: radio selects map color; values always present for res-9 cells -->
+      <div class="panel-card">
+        <h3 class="panel-card-title">Terrain</h3>
+        <dl class="attr-grid">
+          <dt><label class="feat-label">
+            <input type="radio" name="colorFeature" value="elevation">Elevation
+          </label></dt><dd id="attr-elevation">—</dd>
+          <dt><label class="feat-label">
+            <input type="radio" name="colorFeature" value="slope">Slope
+          </label></dt><dd id="attr-slope">—</dd>
+          <dt><label class="feat-label">
+            <input type="radio" name="colorFeature" value="aspect">Aspect
+          </label></dt><dd id="attr-aspect">—</dd>
+        </dl>
+      </div>
+
+      <!-- Dynamic sections: radios + values built by panel.js on cell click -->
+      <div class="panel-card" id="section-weather" hidden>
+        <h3 class="panel-card-title">Weather</h3>
+        <dl class="attr-grid" id="attrs-weather"></dl>
+      </div>
+
+      <div class="panel-card" id="section-soil" hidden>
+        <h3 class="panel-card-title">Soil</h3>
+        <dl class="attr-grid" id="attrs-soil"></dl>
+      </div>
+
+      <div class="panel-card" id="section-vegetation" hidden>
+        <h3 class="panel-card-title">Vegetation</h3>
+        <dl class="attr-grid" id="attrs-vegetation"></dl>
+      </div>
+
+    </div><!-- /tab-latest -->
+
+    <!-- Historic tab: charts -->
+    <div class="panel-tab-content" id="tab-historic">
+
+      <div class="panel-card" id="card-ndvi" hidden>
+        <h3 class="panel-card-title">NDVI History</h3>
+        <div class="chart-wrap"><canvas id="chart-ndvi"></canvas></div>
+      </div>
+
+      <div class="panel-card" id="card-weather-chart" hidden>
+        <h3 class="panel-card-title">Temperature &amp; Precipitation</h3>
+        <div class="chart-wrap"><canvas id="chart-weather"></canvas></div>
+      </div>
+
+    </div><!-- /tab-historic -->
+
+  </div><!-- /panel-body -->
 </aside>
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/map.js') }}"></script>
 <script src="{{ url_for('static', filename='js/panel.js') }}"></script>
 {% endblock %}
