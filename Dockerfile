@@ -27,5 +27,9 @@ RUN pip install --no-cache-dir --no-deps /agritwin-etl
 COPY agriTwin-app/. /app
 RUN pip install --no-cache-dir --no-deps -e /app
 
+RUN chmod +x /app/migrate.sh /app/load.sh
+
 EXPOSE 5000
-ENTRYPOINT ["/app/entrypoint.sh"]
+# Default command: run the Flask dev server.
+# docker-compose overrides this per-service (migrate.sh / load.sh).
+CMD ["flask", "--app", "agritwin_app", "run", "--host", "0.0.0.0"]
