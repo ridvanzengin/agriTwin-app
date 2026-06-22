@@ -4,6 +4,7 @@
 let ndviChart = null;
 let weatherChart = null;
 let isResizing = false;
+let cachedFeatures = null;  // populated once from GET /api/features
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function fmt(value, unit) {
@@ -58,12 +59,26 @@ function populateSection(sectionId, attrsId, features) {
   `).join('');
 }
 
-function buildLatestTab(cell) {
+function buildLatestTab(cell, resolution) {
   populateTerrain(cell);
 
   const byCategory = { weather: [], soil: [], vegetation: [] };
   for (const f of (cell.features ?? [])) {
     if (byCategory[f.category] !== undefined) byCategory[f.category].push(f);
+  }
+
+  // At res-6, soil/vegetation have no observations. Inject placeholder rows from
+  // the cached feature catalogue so the user sees the feature names (disabled,
+  // "—" values) instead of "No data for this cell".
+  if (resolution === 6 && cachedFeatures) {
+    if (!byCategory.soil.length)
+      byCategory.soil = cachedFeatures
+        .filter(f => f.category === 'soil')
+        .map(f => ({ ...f, latest_value: null, latest_timestamp: null }));
+    if (!byCategory.vegetation.length)
+      byCategory.vegetation = cachedFeatures
+        .filter(f => f.category === 'vegetation')
+        .map(f => ({ ...f, latest_value: null, latest_timestamp: null }));
   }
 
   populateSection('section-weather',    'attrs-weather',    byCategory.weather);
@@ -157,9 +172,10 @@ async function fetchTimeseries(h3Id, featureName) {
 // ── Panel open ────────────────────────────────────────────────────────────
 async function openCellPanel(h3Id) {
   const panel = document.getElementById('cell-panel');
+  const wasHidden = panel.hidden;
   panel.hidden = false;
   document.getElementById('panel-h3id').textContent = h3Id;
-  activateTab('latest');
+  if (wasHidden) activateTab('latest');
 
   // Loading state
   ['attr-elevation', 'attr-slope', 'attr-aspect'].forEach(id => {
@@ -177,7 +193,8 @@ async function openCellPanel(h3Id) {
     fetchTimeseries(h3Id, 'precipitation'),
   ]);
 
-  buildLatestTab(cellData);
+  const resolution = window.getCurrentResolution?.() ?? 9;
+  buildLatestTab(cellData, resolution);
   renderNdviChart(ndviTs);
   renderWeatherChart(tempTs, precipTs);
 
@@ -231,6 +248,12 @@ function initResizeHandle() {
 
 // ── Init ──────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  // Pre-fetch feature catalogue so res-6 panel can show placeholder rows for soil/veg
+  fetch('/api/features')
+    .then(r => r.ok ? r.json() : [])
+    .then(list => { cachedFeatures = list; })
+    .catch(() => {});
+
   document.querySelectorAll('.panel-tab').forEach(btn => {
     btn.addEventListener('click', () => activateTab(btn.dataset.tab));
   });

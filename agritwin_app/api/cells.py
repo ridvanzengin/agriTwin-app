@@ -16,8 +16,8 @@ def _f(v):
         return v  # None or non-numeric pass through
 
 
-# Konya Province bounding box (generous sanity limit)
-KONYA_WEST, KONYA_SOUTH, KONYA_EAST, KONYA_NORTH = 30.5, 36.5, 35.5, 40.0
+# Turkey bounding box (generous sanity limit; ±2° margin applied in _bbox_ok)
+TURKEY_WEST, TURKEY_SOUTH, TURKEY_EAST, TURKEY_NORTH = 25.5, 35.5, 45.0, 42.5
 
 # Features stored at H3 resolution 6 (ERA5-Land)
 WEATHER_CATEGORY = "weather"
@@ -41,8 +41,8 @@ def _parse_bbox(raw: str) -> tuple[float, float, float, float]:
 
 def _bbox_ok(w, s, e, n) -> bool:
     return (
-        w >= KONYA_WEST - 1 and s >= KONYA_SOUTH - 1
-        and e <= KONYA_EAST + 1 and n <= KONYA_NORTH + 1
+        w >= TURKEY_WEST - 2 and s >= TURKEY_SOUTH - 2
+        and e <= TURKEY_EAST + 2 and n <= TURKEY_NORTH + 2
         and w < e and s < n
     )
 
@@ -59,7 +59,7 @@ def get_cells():
         return jsonify({"error": str(exc)}), 400
 
     if not _bbox_ok(w, s, e, n):
-        return jsonify({"error": "bbox outside Konya Province extent"}), 400
+        return jsonify({"error": "bbox outside Turkey extent"}), 400
 
     res_raw = request.args.get("resolution", "9")
     try:
@@ -233,6 +233,32 @@ def get_cells():
                 for row in rows
             ]
 
+        body = json.dumps({"type": "FeatureCollection", "features": features})
+        return Response(body, mimetype="application/geo+json")
+
+
+@bp.get("/cells/centroids")
+def get_cell_centroids():
+    """All res-6 cell centroids as Point GeoJSON — loaded once, no bbox filter.
+
+    The MapLibre client fetches this once on startup and handles clustering client-side.
+    Route must be registered before /cells/<h3_id> so 'centroids' isn't captured as h3_id.
+    """
+    with get_session() as session:
+        sql = text("""
+            SELECT h3_id, ST_AsGeoJSON(ST_Centroid(geometry)) AS geojson
+            FROM spatial_cell
+            WHERE resolution = 6
+        """)
+        rows = session.execute(sql).mappings().all()
+        features = [
+            {
+                "type": "Feature",
+                "geometry": json.loads(row["geojson"]),
+                "properties": {"h3_id": row["h3_id"]},
+            }
+            for row in rows
+        ]
         body = json.dumps({"type": "FeatureCollection", "features": features})
         return Response(body, mimetype="application/geo+json")
 

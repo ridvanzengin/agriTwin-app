@@ -1,24 +1,31 @@
 /* global maplibregl, formatFeatureName, WEATHER_FEATURE_NAMES, TERRAIN_FEATURE_NAMES_SET */
 
 // ── Constants ──────────────────────────────────────────────────────────────
-const KONYA_CENTER = [32.5, 38.0];
-const INITIAL_ZOOM = 9;
-const ZOOM_THRESHOLD = 11;   // zoom < 12 → res-6, ≥ 12 → res-9
-const CELL_SOURCE  = 'cells';
-const FILL_LAYER   = 'cells-fill';
-const OUTLINE_LAYER = 'cells-outline';
-const HOVER_LAYER  = 'cells-hover';
+const CLUSTER_THRESHOLD   = 7;    // zoom < 8  → cluster mode
+const ZOOM_THRESHOLD      = 11;   // zoom 8–10 → res-6, ≥ 11 → res-9
+const TURKEY_CENTER       = [35.5, 39.0];
+const INITIAL_ZOOM        = 6;
+
+const CELL_SOURCE         = 'cells';
+const CENTROID_SOURCE     = 'cell-centroids';
+const FILL_LAYER          = 'cells-fill';
+const OUTLINE_LAYER       = 'cells-outline';
+const HOVER_LAYER         = 'cells-hover';
+const CLUSTER_LAYER       = 'clusters';
+const CLUSTER_COUNT_LAYER = 'cluster-count';
+const UNCLUSTERED_LAYER   = 'unclustered-point';
 
 const DEFAULT_FEATURE_RES9 = 'elevation';
 const DEFAULT_FEATURE_RES6 = 'temperature_2m';
 
 // ── State ──────────────────────────────────────────────────────────────────
 let map;
-let currentFeature = DEFAULT_FEATURE_RES9;
+let currentMode       = 'cluster';  // 'cluster' | 'res6' | 'res9'
+let currentFeature    = DEFAULT_FEATURE_RES9;
 let currentResolution = 9;
-let currentTheme = localStorage.getItem('mapTheme') ?? 'light';
-let hoveredH3Id = null;
-let fetchController = null;
+let currentTheme      = localStorage.getItem('mapTheme') ?? 'light';
+let hoveredH3Id       = null;
+let fetchController   = null;
 
 // ── Basemap styles ─────────────────────────────────────────────────────────
 const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
@@ -31,6 +38,7 @@ const BASEMAP_TILES = {
 function makeStyle(theme) {
   return {
     version: 8,
+    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
     sources: {
       'carto-basemap': {
         type: 'raster',
@@ -72,6 +80,7 @@ function buildColorExpression(featureName) {
 
 // ── Layer setup — called on initial load and after setStyle ────────────────
 function setupLayers() {
+  // ── Polygon source (bbox-filtered, updated on move) ──────────────────────
   if (!map.getSource(CELL_SOURCE)) {
     map.addSource(CELL_SOURCE, {
       type: 'geojson',
@@ -79,6 +88,74 @@ function setupLayers() {
     });
   }
 
+  // ── Centroid source (all res-6 Points, loaded once, clustered by MapLibre) ─
+  if (!map.getSource(CENTROID_SOURCE)) {
+    map.addSource(CENTROID_SOURCE, {
+      type: 'geojson',
+      data: '/api/cells/centroids',
+      cluster: true,
+      clusterMaxZoom: CLUSTER_THRESHOLD - 1,  // cluster up to zoom 7; at 8+ show dots
+      clusterRadius: 60,
+    });
+  }
+
+  // ── Cluster layers ────────────────────────────────────────────────────────
+  if (!map.getLayer(CLUSTER_LAYER)) {
+    map.addLayer({
+      id: CLUSTER_LAYER,
+      type: 'circle',
+      source: CENTROID_SOURCE,
+      filter: ['has', 'point_count'],
+      paint: {
+        'circle-color': [
+          'step', ['get', 'point_count'],
+          '#22c55e',        // green:  0 – 99
+          100,  '#eab308',  // yellow: 100 – 499
+          500,  '#f97316',  // orange: 500 – 999
+          1000, '#ef4444',  // red:    1000+
+        ],
+        'circle-radius': [
+          'step', ['get', 'point_count'],
+          18, 100, 24, 500, 30, 1000, 38,
+        ],
+        'circle-opacity': 0.85,
+        'circle-stroke-width': 1.5,
+        'circle-stroke-color': '#fff',
+      },
+    });
+
+    map.addLayer({
+      id: CLUSTER_COUNT_LAYER,
+      type: 'symbol',
+      source: CENTROID_SOURCE,
+      filter: ['has', 'point_count'],
+      layout: {
+        'text-field': ['get', 'point_count_abbreviated'],
+        'text-font': ['Noto Sans Regular'],
+        'text-size': 12,
+      },
+      paint: {
+        'text-color': '#ffffff',
+        'text-halo-color': '#000000',
+        'text-halo-width': 1,
+      },
+    });
+
+    map.addLayer({
+      id: UNCLUSTERED_LAYER,
+      type: 'circle',
+      source: CENTROID_SOURCE,
+      filter: ['!', ['has', 'point_count']],
+      paint: {
+        'circle-color': '#22c55e',
+        'circle-radius': 7,
+        'circle-stroke-width': 1,
+        'circle-stroke-color': '#fff',
+      },
+    });
+  }
+
+  // ── Polygon layers ────────────────────────────────────────────────────────
   if (!map.getLayer(FILL_LAYER)) {
     map.addLayer({
       id: FILL_LAYER,
@@ -110,22 +187,60 @@ function setupLayers() {
     });
   }
 
-  // On initial load the zoom may already be in res-6 territory; apply the same
-  // terrain→weather fallback that onZoomEnd applies on subsequent changes.
+  // Apply the mode appropriate for the current zoom level
+  const initialMode = calcMode();
+  currentMode = initialMode;
+  currentResolution = initialMode === 'res9' ? 9 : 6;
+  updateResolutionBadge();
+  updateRadioAvailability();
+  applyModeVisibility(initialMode);
+
+  if (initialMode !== 'cluster') {
+    if (initialMode === 'res6' && TERRAIN_FEATURE_NAMES_SET.has(currentFeature)) {
+      setFeature(DEFAULT_FEATURE_RES6);  // setFeature calls fetchCells
+    } else {
+      fetchCells();
+    }
+  }
+}
+
+// ── Mode helpers ───────────────────────────────────────────────────────────
+function calcMode() {
+  const z = map.getZoom();
+  if (z < CLUSTER_THRESHOLD) return 'cluster';
+  if (z < ZOOM_THRESHOLD)    return 'res6';
+  return 'res9';
+}
+
+function applyModeVisibility(mode) {
+  const clusterVis = mode === 'cluster' ? 'visible' : 'none';
+  const polyVis    = mode !== 'cluster'  ? 'visible' : 'none';
+  [CLUSTER_LAYER, CLUSTER_COUNT_LAYER, UNCLUSTERED_LAYER].forEach(id => {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', clusterVis);
+  });
+  [FILL_LAYER, OUTLINE_LAYER, HOVER_LAYER].forEach(id => {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', polyVis);
+  });
+}
+
+function setMode(newMode) {
+  if (newMode === currentMode) return;
+  currentMode = newMode;
+  currentResolution = newMode === 'res9' ? 9 : 6;
+  updateResolutionBadge();
+  applyModeVisibility(newMode);
+
+  if (newMode === 'cluster') return;  // centroid source auto-renders; no fetch needed
+
+  updateRadioAvailability();
   if (currentResolution === 6 && TERRAIN_FEATURE_NAMES_SET.has(currentFeature)) {
-    updateRadioAvailability();
-    setFeature(DEFAULT_FEATURE_RES6);
+    setFeature(DEFAULT_FEATURE_RES6);  // setFeature calls fetchCells
     return;
   }
-  updateRadioAvailability();
   fetchCells();
 }
 
-// ── Resolution helpers ─────────────────────────────────────────────────────
-function calcResolution() {
-  return map.getZoom() < ZOOM_THRESHOLD ? 6 : 9;
-}
-
+// ── Resolution/radio helpers ───────────────────────────────────────────────
 function updateRadioAvailability() {
   document.querySelectorAll('input[name="colorFeature"]').forEach(radio => {
     radio.disabled = currentResolution !== 9 && !WEATHER_FEATURE_NAMES.has(radio.value);
@@ -134,7 +249,7 @@ function updateRadioAvailability() {
 
 function updateResolutionBadge() {
   const badge = document.getElementById('resolution-badge');
-  if (badge) badge.textContent = `H3 res-${currentResolution}`;
+  if (badge) badge.textContent = currentMode === 'cluster' ? 'H3 cluster' : `H3 res-${currentResolution}`;
 }
 
 // ── Feature selector (exposed on window so panel.js can call it) ───────────
@@ -150,19 +265,7 @@ function setFeature(name) {
 
 // ── Map event handlers ─────────────────────────────────────────────────────
 function onZoomEnd() {
-  const newRes = calcResolution();
-  if (newRes === currentResolution) return;
-  currentResolution = newRes;
-  updateResolutionBadge();
-
-  if (currentResolution === 6 && TERRAIN_FEATURE_NAMES_SET.has(currentFeature)) {
-    // Terrain features are null at res-6; switch to default weather feature
-    updateRadioAvailability();
-    setFeature(DEFAULT_FEATURE_RES6);
-    return; // setFeature already calls fetchCells
-  }
-  updateRadioAvailability();
-  fetchCells();
+  setMode(calcMode());
 }
 
 function onMouseMove(e) {
@@ -258,30 +361,37 @@ function initMap() {
   map = new maplibregl.Map({
     container: 'map',
     style: makeStyle(currentTheme),
-    center: KONYA_CENTER,
+    center: TURKEY_CENTER,
     zoom: INITIAL_ZOOM,
   });
 
   map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
   map.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: 'metric' }), 'bottom-left');
 
-  map.on('load', () => {
-    currentResolution = calcResolution();
-    updateResolutionBadge();
-    setupLayers();
-  });
+  map.on('load', () => { setupLayers(); });
 
-  // These listeners persist through setStyle calls
-  map.on('moveend', fetchCells);
+  // moveend: only re-fetch polygon cells; cluster source auto-updates
+  map.on('moveend', () => { if (currentMode !== 'cluster') fetchCells(); });
   map.on('zoomend', onZoomEnd);
   map.on('mousemove', HOVER_LAYER, onMouseMove);
   map.on('mouseleave', HOVER_LAYER, onMouseLeave);
   map.on('click', HOVER_LAYER, onCellClick);
+
+  // Cluster click: zoom to expansion zoom
+  map.on('click', CLUSTER_LAYER, e => {
+    const clusterId = e.features[0].properties.cluster_id;
+    map.getSource(CENTROID_SOURCE).getClusterExpansionZoom(clusterId, (err, zoom) => {
+      if (!err) map.easeTo({ center: e.features[0].geometry.coordinates, zoom: zoom + 0.5 });
+    });
+  });
+  map.on('mouseenter', CLUSTER_LAYER, () => { map.getCanvas().style.cursor = 'pointer'; });
+  map.on('mouseleave', CLUSTER_LAYER, () => { map.getCanvas().style.cursor = ''; });
 }
 
 // Exposed for panel.js to call after building radios
 window.setFeature = setFeature;
 window.getCurrentFeature = () => currentFeature;
+window.getCurrentResolution = () => currentResolution;
 window.updateRadioAvailability = updateRadioAvailability;
 
 document.addEventListener('DOMContentLoaded', () => {
