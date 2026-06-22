@@ -148,3 +148,15 @@ def test_timeseries_date_filter(client):
     for point in data["data"]:
         ts = point["timestamp"][:10]
         assert "2023-01-01" <= ts <= "2023-12-31"
+
+
+# ── /api/cells/centroids ────────────────────────────────────────────────────
+
+def test_cell_centroids_returns_geojson(client):
+    resp = client.get("/api/cells/centroids")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["type"] == "FeatureCollection"
+    for feat in data["features"]:
+        assert feat["geometry"]["type"] == "Point"
+        assert "h3_id" in feat["properties"]

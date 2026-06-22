@@ -4,7 +4,7 @@ agritwin-app picks up where agritwin-etl left off. The data lake is built. This 
 
 ---
 
-## Phase 2 — Map + cell inspection (current sprint)
+## Phase 2 — Map + cell inspection (COMPLETE)
 
 **Goal:** a working local web tool to visually browse the agriTwin data lake. No analysis, no scoring — just display.
 
@@ -29,10 +29,30 @@ agritwin-app picks up where agritwin-etl left off. The data lake is built. This 
   - [x] NDVI timeseries line chart (Chart.js from CDN)
   - [x] Monthly temperature + precipitation bar/line chart
 - [x] pytest suite covers all API endpoints with a test database
-- [ ] DB seeded — `agritwin-etl db-load` in progress; spatial_cell loading (346k rows)
-- [ ] Verify end-to-end: `flask run` → map → cell click → panel data
+- [x] DB seeded — all tables loaded (29.5M observations)
+- [x] Verify end-to-end: `docker compose up --build -d` → map → cell click → panel data
 
 **Deliverable:** `flask run` → open browser → see the map → click a cell → see its data.
+
+---
+
+## Phase 2.5 — UI Polish
+
+**Goal:** fix rendering performance and improve usability for field/farm browsing.
+
+### Checklist
+
+- [x] Zoom-adaptive H3 resolution: res-6 cells at zoom < 12, res-9 at zoom ≥ 12 (fixes full-province render failure)
+- [x] Light basemap default (CARTO Voyager) + dark/light toggle button
+- [x] Feature color selector moved from toolbar dropdown → left sidebar radio buttons (all 26 features)
+- [x] Disabled radio buttons (with opacity) for features unavailable at current resolution
+- [x] Grid fill opacity 0.45 (was 0.55) so underlying map detail is always visible
+- [x] Right panel: two tabs (Latest default / Historic)
+- [x] Latest tab: 4 ordered sections — Terrain → Weather → Soil → Vegetation
+- [x] Historic tab: NDVI History chart + Temperature & Precipitation chart
+- [x] Right panel: drag-to-resize handle (min 300px, max 900px, width persisted to localStorage)
+- [x] Feature names: human-readable display names (e.g. "Temperature (2m)", "Organic Carbon (0–5cm)")
+- [x] Resolution badge overlay (bottom-left of map) shows current H3 resolution
 
 ---
 

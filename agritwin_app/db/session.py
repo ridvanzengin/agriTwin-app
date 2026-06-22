@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -11,6 +13,7 @@ def init_db(database_url: str) -> None:
     _SessionLocal = sessionmaker(bind=_engine, autocommit=False, autoflush=False)
 
 
+@contextmanager
 def get_session():
     if _SessionLocal is None:
         raise RuntimeError("Database not initialised — call init_db() first")

@@ -50,7 +50,7 @@ Returns a GeoJSON FeatureCollection of H3 cells whose geometry intersects the gi
 | param | required | type | description |
 |---|---|---|---|
 | `bbox` | yes | string | `west,south,east,north` in WGS84 decimal degrees |
-| `feature` | no | string | feature name — adds `value` and `value_unit` properties to each cell using the latest observed value |
+| `feature` | no | string | feature name — adds `value` and `value_unit` properties to each cell |
 
 ### Example
 
@@ -84,6 +84,8 @@ GET /api/cells?bbox=31.8,37.2,34.2,39.4&feature=ndvi
 ```
 
 When `feature` is not supplied, `value` and `value_unit` are absent from `properties`.
+
+**Terrain features:** `elevation`, `slope`, and `aspect` are read directly from the `spatial_cell` table (not from `observation`). Requesting `?feature=elevation` returns `value` = the cell's elevation in metres and `value_unit` = `"m"`. These are handled as a special case in `api/cells.py` via a `TERRAIN_FEATURES` dict; they do not appear in `GET /api/features` (which lists observation-backed features only).
 
 ### Error responses
 
