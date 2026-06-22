@@ -187,8 +187,9 @@ pytest
 
 ## Phase 2 definition of done — COMPLETE ✅
 
-All 18 pytest tests pass. Verified end-to-end against the fully-loaded DB.
+All 19 pytest tests pass. Verified end-to-end against the fully-loaded DB.
 
+**Phase 2 core (map display + cell profile):**
 - [x] `flask run` starts the dev server; `GET /` returns a Jinja2-rendered page with a MapLibre map centered on Konya Province (lon 32.5, lat 38.0, zoom 9)
 - [x] `GET /api/cells?bbox=w,s,e,n` returns a GeoJSON FeatureCollection of cells in the viewport
 - [x] `GET /api/cells?bbox=...&feature=ndvi` adds `value` + `value_unit` to each cell's properties
@@ -198,14 +199,38 @@ All 18 pytest tests pass. Verified end-to-end against the fully-loaded DB.
 - [x] `GET /api/cells/<h3_id>` returns the full cell profile as JSON
 - [x] `GET /api/cells/<h3_id>/timeseries?feature=ndvi` returns timestamped values as JSON
 - [x] `GET /api/features` returns the feature list
-- [x] pytest suite covers all API endpoints (18 tests)
+
+**Phase 2.5 UI polish (multi-level H3 + clustering):**
+- [x] Three zoom-mode map: cluster view (zoom < 8) → res-6 polygons (8–10) → res-9 polygons (≥ 11)
+- [x] `GET /api/cells/centroids` returns all res-6 centroids for MapLibre native clustering
+- [x] Feature radios embedded inline in sidebar Latest tab cards; panel hidden until cell click
+- [x] Tab memory preserved across panel opens (no spurious tab reset)
+- [x] Soil/Vegetation rows disabled at res-6 with inline placeholder (ETL only populates those at res-9)
+- [x] NaN floats serialized as JSON `null` (prevents SyntaxError on res-6 cells)
+- [x] DB session pool exhaustion fixed — `get_session()` uses `@contextmanager`; all callers use `with get_session()`
+
+## Phase 3 definition of done — IN PROGRESS 🚧
+
+**Goal:** Suitability scoring — compute per-cell, per-crop scores from `crop_requirement` data; display on map.
+
+- [ ] Alembic migration creates app-owned tables: `suitability_score`, `scenario`, `scenario_override`, `yield_prediction`, `profit_projection`
+- [ ] `agritwin_app/scoring/engine.py` — pure scoring function: reads cell features + crop requirements, returns score 0–1
+- [ ] `flask score run [--crop NAME]` CLI command — bulk-scores all res-9 cells, writes to `suitability_score`; idempotent (upsert)
+- [ ] `POST /api/score/run` — triggers scoring in a background thread; returns `{"status": "started"}`
+- [ ] `GET /api/score/status` — returns `{"status": "running|idle|error", "scored_at": ...}`
+- [ ] `GET /api/cells?bbox=...&mode=score&crop=wheat` — cells colored by suitability score (0–1) for the given crop
+- [ ] `GET /api/cells/<h3_id>/scores` — returns `[{crop, score, scored_at}]` for all crops for the cell
+- [ ] Map: "Suitability" mode toggle + crop dropdown; map colors shift to score palette (0=red → 1=green)
+- [ ] Cell panel: "Suitability" tab listing all crop scores as a bar chart
+- [ ] pytest covers all new API endpoints (target: ~25 total tests)
 
 ## Things to avoid
 
 - Don't add ingest logic, Parquet writing, or `agritwin-etl` CLI commands here.
 - Don't run Alembic against ETL-owned tables.
-- Don't add suitability scoring or scenario simulation until Phase 2 is complete and tested.
+- Don't add scenario simulation or yield/profit prediction until suitability scoring is complete and tested.
 - Don't use React, Vue, or any JS framework — vanilla JS only.
 - Don't use npm or a JS build step — MapLibre loaded from CDN.
 - Don't add user authentication until it's explicitly needed.
 - Don't compute results on the fly at request time — read from the DB; write computed results to tables as background tasks.
+- Don't add Celery or Redis for background tasks — use Python `threading.Thread`; the scoring job is infrequent and Docker Compose should stay at four services.
