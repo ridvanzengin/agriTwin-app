@@ -13,6 +13,21 @@ config.set_main_option("sqlalchemy.url", settings.database_url)
 
 target_metadata = Base.metadata
 
+# Tables owned by the ETL Alembic chain. The app chain must never generate DDL
+# for these — autogenerate would see model/schema drift and emit ALTER TABLEs
+# that corrupt ETL-owned data.
+_ETL_TABLES = {
+    "data_source", "spatial_cell", "feature", "observation",
+    "crop", "crop_requirement", "commodity_price", "production_cost",
+    "ingestion_run", "crop_statistics",
+}
+
+
+def _include_object(obj, name, type_, reflected, compare_to):
+    if type_ == "table" and name in _ETL_TABLES:
+        return False
+    return True
+
 
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
@@ -22,6 +37,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         version_table="alembic_version_app",
+        include_object=_include_object,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -38,6 +54,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             version_table="alembic_version_app",
+            include_object=_include_object,
         )
         with context.begin_transaction():
             context.run_migrations()
