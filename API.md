@@ -43,19 +43,31 @@ Returns all available feature names, categories, and units. Used by the frontend
 
 ## GET /api/cells
 
-Returns a GeoJSON FeatureCollection of H3 cells whose geometry intersects the given bounding box. Called by `map.js` on every `moveend` event.
+Returns a GeoJSON FeatureCollection of H3 cells whose geometry intersects the given bounding box. Called by `map.js` on every `moveend` and on zoom-level changes.
 
 ### Query parameters
 
 | param | required | type | description |
 |---|---|---|---|
 | `bbox` | yes | string | `west,south,east,north` in WGS84 decimal degrees |
+| `resolution` | no | int | H3 resolution: 6, 7, 8, or 9 (default: 9) |
 | `feature` | no | string | feature name — adds `value` and `value_unit` properties to each cell |
+
+### Resolution and feature availability
+
+| resolution | cells | weather features | soil/NDVI/ET features | terrain (elevation/slope/aspect) |
+|---|---|---|---|---|
+| 6 | 1,115 | ✓ direct (ERA5 stored at res-6) | ✓ aggregated from res-9 | null (ERA5 cells have no SRTM data) |
+| 7 | 7,343 | ✓ via res-6 parent lookup | ✓ aggregated from res-9 | ✓ mean of res-9 children |
+| 8 | 50,056 | ✓ via res-6 parent lookup | ✓ aggregated from res-9 | ✓ mean of res-9 children |
+| 9 | 346,787 | ✓ via res-6 parent lookup | ✓ raw observations | ✓ from SRTM |
+
+Weather features (category `weather`) are stored at res-6. For res-7/8/9 cells, the API maps each cell to its res-6 ancestor via `h3.cell_to_parent` and joins from there — no data duplication, just a query-time lookup.
 
 ### Example
 
 ```
-GET /api/cells?bbox=31.8,37.2,34.2,39.4&feature=ndvi
+GET /api/cells?bbox=31.8,37.2,34.2,39.4&feature=ndvi&resolution=7
 ```
 
 ### Response — GeoJSON FeatureCollection
@@ -92,7 +104,31 @@ When `feature` is not supplied, `value` and `value_unit` are absent from `proper
 | status | condition |
 |---|---|
 | 400 | `bbox` missing or not parseable as four floats |
+| 400 | `resolution` not in (6, 7, 8, 9) |
 | 400 | Bounding box covers more than the full extent of Konya Province (sanity limit) |
+
+---
+
+## GET /api/cells/centroids
+
+Returns all res-6 cell centroids as a Point GeoJSON FeatureCollection. Loaded once on startup by `map.js` and used as the source for MapLibre's client-side clustering at low zoom levels.
+
+### Response
+
+```json
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [32.41, 37.88] },
+      "properties": { "h3_id": "862d16267ffffff" }
+    }
+  ]
+}
+```
+
+No query parameters. Always returns all 1,115 res-6 centroids.
 
 ---
 

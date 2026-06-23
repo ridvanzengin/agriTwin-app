@@ -36,23 +36,26 @@ agritwin-app picks up where agritwin-etl left off. The data lake is built. This 
 
 ---
 
-## Phase 2.5 — UI Polish
+## Phase 2.5 — UI Polish + Multi-resolution map (COMPLETE)
 
-**Goal:** fix rendering performance and improve usability for field/farm browsing.
+**Goal:** fix rendering performance, improve usability, and add zoom-adaptive H3 resolution levels.
 
 ### Checklist
 
-- [x] Zoom-adaptive H3 resolution: res-6 cells at zoom < 12, res-9 at zoom ≥ 12 (fixes full-province render failure)
+- [x] 5-level zoom-adaptive map: cluster (< 5) → res-6 (5–6) → res-7 (7–8) → res-8 (9–10) → res-9 (≥ 11)
+- [x] `GET /api/cells?resolution=6|7|8|9` — multi-resolution cell endpoint
+- [x] `GET /api/cells/centroids` — res-6 centroids for MapLibre clustering source
+- [x] Weather features at res-7/8/9 resolved to res-6 parent at query time (no ERA5 duplication)
 - [x] Light basemap default (CARTO Voyager) + dark/light toggle button
-- [x] Feature color selector moved from toolbar dropdown → left sidebar radio buttons (all 26 features)
-- [x] Disabled radio buttons (with opacity) for features unavailable at current resolution
-- [x] Grid fill opacity 0.45 (was 0.55) so underlying map detail is always visible
+- [x] Feature color selector moved from toolbar dropdown → left sidebar radio buttons (all features)
+- [x] Grid fill opacity 0.45 so underlying map detail is always visible
 - [x] Right panel: two tabs (Latest default / Historic)
 - [x] Latest tab: 4 ordered sections — Terrain → Weather → Soil → Vegetation
 - [x] Historic tab: NDVI History chart + Temperature & Precipitation chart
 - [x] Right panel: drag-to-resize handle (min 300px, max 900px, width persisted to localStorage)
 - [x] Feature names: human-readable display names (e.g. "Temperature (2m)", "Organic Carbon (0–5cm)")
 - [x] Resolution badge overlay (bottom-left of map) shows current H3 resolution
+- [x] Duplicate fetch bug fixed: `_zoomFetched` flag suppresses the `moveend` that MapLibre fires after every `zoomend`
 
 ---
 

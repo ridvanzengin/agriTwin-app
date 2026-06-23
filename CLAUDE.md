@@ -215,17 +215,26 @@ All 19 pytest tests pass. Verified end-to-end against the fully-loaded DB.
 
 ## Phase 3 definition of done — IN PROGRESS 🚧
 
-**Goal:** Suitability scoring — compute per-cell, per-crop scores from `crop_requirement` data; display on map.
+**Goal:** Suitability scoring — display per-cell, per-crop scores on a dedicated suitability page.
+
+**Architecture (locked in):**
+- Scores are **computed in `agritwin-etl`** (not here): `agritwin-etl score` writes `suitability_score.parquet`; the loader loads it into `suitability_score`. This app is **read-only** for scores.
+- Suitability lives on its **own page** (`GET /suitability`) with its own map, its own sidebar, and its own JS files (`suitability_map.js`, `suitability_panel.js`). Zero changes to `map.js`/`panel.js`.
+- Scoring uses **monthly averages**, not latest-value snapshots: each month's ERA5 cell mean vs. that month's crop requirement. Soil/terrain use a single year-round comparison.
+- Suitability map is **res-9 only** — field-level analysis tool; no multi-resolution zoom ladder.
+
+**ETL prerequisite:** `crop_requirement` gains a `month INT NULL` column (ETL Alembic migration + `crops.yaml` rewrite). This must be done before implementing the scoring engine or the monthly detail API.
 
 - [x] Alembic migration creates app-owned tables: `suitability_score`, `scenario`, `scenario_override`, `yield_prediction`, `profit_projection` (`alembic/versions/0001_create_app_tables.py`)
-- [ ] `agritwin_app/scoring/engine.py` — pure scoring function: reads cell features + crop requirements, returns score 0–1
-- [ ] `flask score run [--crop NAME]` CLI command — bulk-scores all res-9 cells, writes to `suitability_score`; idempotent (upsert)
-- [ ] `POST /api/score/run` — triggers scoring in a background thread; returns `{"status": "started"}`
-- [ ] `GET /api/score/status` — returns `{"status": "running|idle|error", "scored_at": ...}`
-- [ ] `GET /api/cells?bbox=...&mode=score&crop=wheat` — cells colored by suitability score (0–1) for the given crop
-- [ ] `GET /api/cells/<h3_id>/scores` — returns `[{crop, score, scored_at}]` for all crops for the cell
-- [ ] Map: "Suitability" mode toggle + crop dropdown; map colors shift to score palette (0=red → 1=green)
-- [ ] Cell panel: "Suitability" tab listing all crop scores as a bar chart
+- [ ] `GET /suitability` route + `suitability.html` template — own navbar item, MapLibre container, right sidebar (2 tabs)
+- [ ] `agritwin_app/views/suitability.py` — renders suitability page
+- [ ] `agritwin_app/api/suitability.py` — three endpoints:
+  - `GET /api/suitability/cells?bbox=w,s,e,n&crop=<name>` — GeoJSON FeatureCollection with `score` (0–1) property
+  - `GET /api/suitability/cells/<h3_id>` — returns `[{crop_name, score, scored_at}]` for all 8 crops
+  - `GET /api/suitability/cells/<h3_id>/monthly?crop=<name>` — monthly actual means + requirements for all weather features (feeds Tab 2)
+- [ ] `suitability_map.js` — MapLibre init at res-9 zoom; score color ramp (0=red → 1=green); bbox fetch on moveend; no zoom ladder
+- [ ] `suitability_panel.js` — Tab 1: 8 crops with radio buttons + CSS progress bars (score as 0–100%); clicking radio recolors map. Tab 2: Chart.js band chart (shaded ideal range + actual monthly mean line) with feature selector
+- [ ] `base.html` — add "Suitability" navbar link
 - [ ] pytest covers all new API endpoints (target: ~25 total tests)
 
 ## Things to avoid
@@ -236,5 +245,6 @@ All 19 pytest tests pass. Verified end-to-end against the fully-loaded DB.
 - Don't use React, Vue, or any JS framework — vanilla JS only.
 - Don't use npm or a JS build step — MapLibre loaded from CDN.
 - Don't add user authentication until it's explicitly needed.
-- Don't compute results on the fly at request time — read from the DB; write computed results to tables as background tasks.
-- Don't add Celery or Redis for background tasks — use Python `threading.Thread`; the scoring job is infrequent and Docker Compose should stay at four services.
+- Don't compute suitability scores here — scores are computed by `agritwin-etl score` and loaded into `suitability_score` by the loader. This app only reads them.
+- Don't add a `scoring/` module to this repo — the `agritwin_app/scoring/` directory (with stale `__pycache__`) should be deleted; all scoring logic lives in `agritwin-etl`.
+- Don't add Celery, Redis, or background scoring threads — Docker Compose stays at four services.
