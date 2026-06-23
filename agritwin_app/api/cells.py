@@ -64,10 +64,10 @@ def get_cells():
     res_raw = request.args.get("resolution", "9")
     try:
         resolution = int(res_raw)
-        if resolution not in (6, 9):
+        if resolution not in (7, 8, 9):
             raise ValueError
     except ValueError:
-        return jsonify({"error": "resolution must be 6 or 9"}), 400
+        return jsonify({"error": "resolution must be 7, 8, or 9"}), 400
 
     feature_name = request.args.get("feature")
     base_params = {"w": w, "s": s, "e": e, "n": n, "resolution": resolution}
@@ -115,17 +115,17 @@ def get_cells():
             if feat_row is None:
                 return jsonify({"error": f"unknown feature: {feature_name}"}), 400
 
-            if feat_row.category == WEATHER_CATEGORY and resolution == 9:
-                # Weather at res-9: ERA5 observations stored at res-6 parent cells.
-                # Map each res-9 cell to its ERA5 parent before joining observations.
+            if feat_row.category == WEATHER_CATEGORY and resolution != ERA5_RESOLUTION:
+                # Weather: ERA5 observations stored at res-6 parent cells.
+                # Map each polygon cell (res-7/8/9) to its ERA5 parent before joining.
                 cells_sql = text("""
                     SELECT h3_id, ST_AsGeoJSON(geometry) AS geojson, elevation, slope, aspect
                     FROM spatial_cell
                     WHERE geometry && ST_MakeEnvelope(:w, :s, :e, :n, 4326)
-                      AND resolution = 9
+                      AND resolution = :resolution
                 """)
                 cell_rows = session.execute(
-                    cells_sql, {"w": w, "s": s, "e": e, "n": n}
+                    cells_sql, {"w": w, "s": s, "e": e, "n": n, "resolution": resolution}
                 ).mappings().all()
 
                 parent_map = {
@@ -161,10 +161,8 @@ def get_cells():
                     for row in cell_rows
                 ]
             else:
-                # Direct lateral join handles:
-                # - weather at res-6: observations link directly to res-6 h3_id
-                # - soil/vegetation at res-9: observations at res-9
-                # - soil/vegetation at res-6: returns null (no obs at res-6) — shows gray
+                # Direct lateral join: soil/vegetation at res-7/8/9 link directly via h3_id
+                # (aggregated_res7/res8 Parquet files are loaded into observation at those h3_ids)
                 sql = text("""
                     SELECT
                         sc.h3_id,
