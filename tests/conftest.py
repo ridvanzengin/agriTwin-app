@@ -16,6 +16,15 @@ def app():
     )
     app = create_app(settings)
     app.config["TESTING"] = True
+
+    # Run Celery tasks synchronously (no broker needed in tests)
+    celery_app = app.extensions["celery"]
+    celery_app.conf.update(
+        task_always_eager=True,
+        task_eager_propagates=True,
+        broker_url="memory://",
+        result_backend="cache+memory://",
+    )
     return app
 
 

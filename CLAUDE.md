@@ -12,7 +12,7 @@ AgriTwin's web application. A Flask + MapLibre tool that reads from the PostgreS
 
 - Not an ETL pipeline. No downloading, parsing, or Parquet writing. That lives in `agritwin-etl`.
 - No Alembic migrations for ETL-owned tables (`data_source`, `spatial_cell`, `feature`, `observation`, `crop`, `crop_requirement`, `commodity_price`, `production_cost`, `ingestion_run`, `crop_statistics`). This repo reads those tables but never migrates them.
-- This repo's Alembic chain manages only app-owned tables: `scenario`, `scenario_override`, `suitability_score`, `yield_prediction`, `profit_projection`. Phase 2 creates none of these yet.
+- This repo's Alembic chain manages only app-owned tables: `scenario`, `scenario_override`, `suitability_score`, `yield_prediction`, `profit_projection`. These were created in the Phase 3 migration.
 
 ## Tech stack
 
@@ -21,7 +21,7 @@ AgriTwin's web application. A Flask + MapLibre tool that reads from the PostgreS
 - MapLibre GL JS loaded from CDN — no npm, no build step
 - Vanilla JS + Fetch API for all interactivity
 - PostgreSQL + PostGIS + TimescaleDB (populated by `agritwin-etl`)
-- Docker Compose (four services: db, migrate, web, loader — one command starts everything)
+- Docker Compose (six services: db, migrate, web, loader, redis, worker — one command starts everything)
 - pytest
 
 ## Key architecture decisions (already made — don't relitigate without discussion)
@@ -63,29 +63,40 @@ agritwin-app/
   agritwin_app/
     __init__.py                # Flask app factory: create_app()
     config.py                  # Pydantic BaseSettings, reads .env
+    celery_app.py              # Celery factory: celery_init_app()
+    worker.py                  # Celery worker entry point (-A agritwin_app.worker)
+    tasks.py                   # Celery task: run_suitability_scoring
     db/
       session.py               # SQLAlchemy engine + SessionLocal
       models.py                # All models: ETL tables (read-only) + app-owned tables
+    scoring/
+      engine.py                # Pure functions: land_cover_gate, triangle_score, score_cell
+      aggregator.py            # collect_feature_values() — bulk pre-fetch for scoring loop
     api/
       __init__.py              # api Blueprint registration
-      cells.py                 # GET /api/cells, /api/cells/<h3_id>, /api/cells/<h3_id>/timeseries
+      cells.py                 # GET /api/cells (incl. mode=score), /api/cells/<h3_id>, /timeseries, /scores
       features.py              # GET /api/features
+      crops.py                 # GET /api/crops
+      score.py                 # POST /api/score/run, GET /api/score/status/<task_id>
     views/
       __init__.py              # views Blueprint registration
       map.py                   # GET / → renders map.html
     templates/
       base.html                # HTML boilerplate, MapLibre CDN links
-      map.html                 # map container + sidebar panel
+      map.html                 # map container + sidebar panel (Feature/Suitability modes)
     static/
       js/
-        map.js                 # MapLibre init, bbox fetch on moveend, layer setup
-        panel.js               # cell click → sidebar populate + charts
+        map.js                 # MapLibre init, bbox fetch, view mode toggle, score color ramp
+        panel.js               # cell click → sidebar populate + charts (incl. Suitability tab)
       css/
         app.css
   tests/
-    conftest.py                # Flask test client, DB session fixture
+    conftest.py                # Flask test client, DB session fixture, Celery ALWAYS_EAGER
     test_api_cells.py
     test_api_features.py
+    test_scoring_engine.py     # 21 pure unit tests for scoring engine
+    test_api_score.py          # integration tests for /api/score/* and /api/crops
+    test_api_cells_score.py    # integration tests for score mode in /api/cells
 ```
 
 ## Local development setup
@@ -99,13 +110,15 @@ cp .env.example .env             # set FLASK_SECRET_KEY (any string for local de
 docker compose up --build -d
 ```
 
-This starts four services in dependency order:
+This starts six services in dependency order:
 
 | Service | What it does | Exits? |
 |---|---|---|
 | `db` | PostgreSQL + PostGIS + TimescaleDB on port 5433 | stays up |
+| `redis` | Redis 7 on port 6379 (Celery broker + result backend) | stays up |
 | `migrate` | Applies both Alembic chains (ETL's + this app's), then exits | yes |
 | `web` | Flask app on port 5001 (starts after `migrate`) | stays up |
+| `worker` | Celery worker — runs suitability scoring tasks (starts after `migrate` + redis) | stays up |
 | `loader` | Bulk-loads all Parquet data (~5–10 min via COPY FROM STDIN), then exits | yes |
 
 Flask is available at **http://localhost:5001** while the loader runs — the map appears immediately and data fills in as tables load.
@@ -164,6 +177,8 @@ These bugs were found and fixed during Phase 2 — do **not** re-apply:
 | `DATABASE_URL` | `postgresql+psycopg://agritwin:agritwin@localhost:5433/agritwin` | Same DB as agritwin-etl |
 | `FLASK_SECRET_KEY` | — | Required; set any random string for local dev |
 | `FLASK_DEBUG` | `false` | Set `true` for dev |
+| `CELERY_BROKER_URL` | `redis://localhost:6379/0` | Celery broker (Redis) |
+| `CELERY_RESULT_BACKEND` | `redis://localhost:6379/0` | Celery result backend |
 
 See `.env.example` for the full list.
 
@@ -209,28 +224,30 @@ All 19 pytest tests pass. Verified end-to-end against the fully-loaded DB.
 - [x] NaN floats serialized as JSON `null` (prevents SyntaxError on res-6 cells)
 - [x] DB session pool exhaustion fixed — `get_session()` uses `@contextmanager`; all callers use `with get_session()`
 
-## Phase 3 definition of done — IN PROGRESS 🚧
+## Phase 3 definition of done — COMPLETE ✅
 
 **Goal:** Suitability scoring — compute per-cell, per-crop scores from `crop_requirement` data; display on map.
 
-- [ ] Alembic migration creates app-owned tables: `suitability_score`, `scenario`, `scenario_override`, `yield_prediction`, `profit_projection`
-- [ ] `agritwin_app/scoring/engine.py` — pure scoring function: reads cell features + crop requirements, returns score 0–1
-- [ ] `flask score run [--crop NAME]` CLI command — bulk-scores all res-9 cells, writes to `suitability_score`; idempotent (upsert)
-- [ ] `POST /api/score/run` — triggers scoring in a background thread; returns `{"status": "started"}`
-- [ ] `GET /api/score/status` — returns `{"status": "running|idle|error", "scored_at": ...}`
-- [ ] `GET /api/cells?bbox=...&mode=score&crop=wheat` — cells colored by suitability score (0–1) for the given crop
-- [ ] `GET /api/cells/<h3_id>/scores` — returns `[{crop, score, scored_at}]` for all crops for the cell
-- [ ] Map: "Suitability" mode toggle + crop dropdown; map colors shift to score palette (0=red → 1=green)
-- [ ] Cell panel: "Suitability" tab listing all crop scores as a bar chart
-- [ ] pytest covers all new API endpoints (target: ~25 total tests)
+- [x] Alembic migration creates app-owned tables: `suitability_score`, `scenario`, `scenario_override`, `yield_prediction`, `profit_projection`
+- [x] `agritwin_app/scoring/engine.py` — pure scoring function: triangle membership function, land_cover_type hard gate, weighted average
+- [x] `agritwin_app/scoring/aggregator.py` — bulk pre-fetches all feature values (ERA5 res-6 fan-out, soil, terrain) for all res-9 cells
+- [x] Celery + Redis for background task execution (6 Docker Compose services)
+- [x] `POST /api/score/run` — dispatches Celery task, returns `{"task_id": "..."}`; 202
+- [x] `GET /api/score/status/<task_id>` — polls Celery result backend
+- [x] `GET /api/crops` — returns list of available crops
+- [x] `GET /api/cells?bbox=...&mode=score&crop=Wheat` — cells colored by suitability score (0–1)
+- [x] `GET /api/cells/<h3_id>/scores` — returns all crop scores for a single cell
+- [x] Map: "Feature / Suitability" mode toggle + crop dropdown + "⟳ Score" button; score color ramp (red → green)
+- [x] Cell panel: "Suitability" tab with horizontal bar chart of all crop scores
+- [x] pytest covers scoring engine (21 unit tests) + all new API endpoints (~36 total tests)
 
 ## Things to avoid
 
 - Don't add ingest logic, Parquet writing, or `agritwin-etl` CLI commands here.
 - Don't run Alembic against ETL-owned tables.
-- Don't add scenario simulation or yield/profit prediction until suitability scoring is complete and tested.
+- Don't add scenario simulation or yield/profit prediction until Phase 3 is complete and tested.
 - Don't use React, Vue, or any JS framework — vanilla JS only.
 - Don't use npm or a JS build step — MapLibre loaded from CDN.
 - Don't add user authentication until it's explicitly needed.
 - Don't compute results on the fly at request time — read from the DB; write computed results to tables as background tasks.
-- Don't add Celery or Redis for background tasks — use Python `threading.Thread`; the scoring job is infrequent and Docker Compose should stay at four services.
+- Use Celery + Redis for background tasks (already wired); don't use `threading.Thread` for new long-running jobs.

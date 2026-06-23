@@ -29,6 +29,16 @@ services:
       db:
         condition: service_healthy
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
   # Flask app — starts as soon as migrations are done, serves while data loads.
   web:
     build:
@@ -41,9 +51,31 @@ services:
       DATABASE_URL: postgresql+psycopg://agritwin:agritwin@db:5432/agritwin
       FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:-dev-secret-change-in-production}
       FLASK_DEBUG: "false"
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
     depends_on:
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  # Celery worker — same image as web, handles background scoring tasks.
+  worker:
+    build:
+      context: ..
+      dockerfile: agriTwin-app/Dockerfile
+    command: celery -A agritwin_app.worker worker --loglevel=info --concurrency=2
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://agritwin:agritwin@db:5432/agritwin
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:-dev-secret-change-in-production}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
 
   # One-shot data loader — runs after migrate, exits when all tables are loaded.
   # Idempotent: skips any table that already has rows, so restarts are safe.

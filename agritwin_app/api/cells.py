@@ -6,7 +6,7 @@ from flask import jsonify, request, Response
 from sqlalchemy import select, text
 from . import bp
 from ..db.session import get_session
-from ..db.models import Feature, Observation, SpatialCell
+from ..db.models import Crop, Feature, Observation, SpatialCell
 
 def _f(v):
     """PostgreSQL can store NaN for float columns; json.dumps emits NaN (invalid JSON). Return None instead."""
@@ -69,10 +69,58 @@ def get_cells():
     except ValueError:
         return jsonify({"error": "resolution must be 6 or 9"}), 400
 
+    mode = request.args.get("mode", "feature")
     feature_name = request.args.get("feature")
     base_params = {"w": w, "s": s, "e": e, "n": n, "resolution": resolution}
 
     with get_session() as session:
+        if mode == "score":
+            crop_name = request.args.get("crop")
+            if not crop_name:
+                return jsonify({"error": "crop parameter is required in score mode"}), 400
+            crop_row = session.execute(
+                select(Crop).where(Crop.name == crop_name)
+            ).scalar_one_or_none()
+            if crop_row is None:
+                return jsonify({"error": f"unknown crop: {crop_name}"}), 400
+
+            sql = text("""
+                SELECT
+                    sc.h3_id,
+                    ST_AsGeoJSON(sc.geometry) AS geojson,
+                    sc.elevation,
+                    sc.slope,
+                    sc.aspect,
+                    ss.score
+                FROM spatial_cell sc
+                LEFT JOIN suitability_score ss
+                    ON ss.h3_id = sc.h3_id
+                    AND ss.crop_id = :crop_id
+                    AND ss.scenario_id IS NULL
+                WHERE sc.geometry && ST_MakeEnvelope(:w, :s, :e, :n, 4326)
+                  AND sc.resolution = 9
+            """)
+            rows = session.execute(
+                sql, {**base_params, "crop_id": crop_row.crop_id}
+            ).mappings().all()
+            features = [
+                {
+                    "type": "Feature",
+                    "geometry": json.loads(row["geojson"]),
+                    "properties": {
+                        "h3_id": row["h3_id"],
+                        "elevation": _f(row["elevation"]),
+                        "slope": _f(row["slope"]),
+                        "aspect": _f(row["aspect"]),
+                        "score": _f(row["score"]),
+                        "crop": crop_name,
+                    },
+                }
+                for row in rows
+            ]
+            body = json.dumps({"type": "FeatureCollection", "features": features})
+            return Response(body, mimetype="application/geo+json")
+
         if feature_name:
             if feature_name in TERRAIN_FEATURES:
                 # elevation/slope/aspect are spatial_cell columns (null at res-6, populated at res-9)
@@ -311,6 +359,36 @@ def get_cell(h3_id: str):
                     "unit": row["unit"] or "",
                     "latest_value": row["value"],
                     "latest_timestamp": row["timestamp"].isoformat() if row["timestamp"] else None,
+                }
+                for row in rows
+            ],
+        })
+
+
+@bp.get("/cells/<h3_id>/scores")
+def get_cell_scores(h3_id: str):
+    """Return suitability scores for all crops for a single cell (baseline, no scenario)."""
+    with get_session() as session:
+        cell = session.get(SpatialCell, h3_id)
+        if cell is None:
+            return jsonify({"error": f"cell {h3_id!r} not found"}), 404
+
+        sql = text("""
+            SELECT c.name AS crop_name, c.crop_id, ss.score, ss.scored_at
+            FROM suitability_score ss
+            JOIN crop c ON c.crop_id = ss.crop_id
+            WHERE ss.h3_id = :h3_id AND ss.scenario_id IS NULL
+            ORDER BY ss.score DESC NULLS LAST
+        """)
+        rows = session.execute(sql, {"h3_id": h3_id}).mappings().all()
+        return jsonify({
+            "h3_id": h3_id,
+            "scores": [
+                {
+                    "crop_id": row["crop_id"],
+                    "crop_name": row["crop_name"],
+                    "score": _f(row["score"]),
+                    "scored_at": row["scored_at"].isoformat() if row["scored_at"] else None,
                 }
                 for row in rows
             ],

@@ -22,3 +22,5 @@ SQLAlchemy==2.0.51
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 Werkzeug==3.1.8
+celery>=5.3
+redis>=5.0

@@ -26,6 +26,10 @@ let currentResolution = 9;
 let currentTheme      = localStorage.getItem('mapTheme') ?? 'light';
 let hoveredH3Id       = null;
 let fetchController   = null;
+let viewMode          = 'feature';  // 'feature' | 'suitability'
+let currentCrop       = null;
+let scoringTaskId     = null;
+let scoringPollTimer  = null;
 
 // ── Basemap styles ─────────────────────────────────────────────────────────
 const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
@@ -75,6 +79,19 @@ function buildColorExpression(featureName) {
     'interpolate', ['linear'],
     ['coalesce', ['get', prop], stops[0][0]],
     ...stops.flatMap(([v, c]) => [v, c]),
+  ];
+}
+
+function buildScoreColorExpression() {
+  return [
+    'interpolate', ['linear'],
+    ['coalesce', ['get', 'score'], -1],
+    -1, '#cccccc',
+    0.0, '#d73027',
+    0.25, '#fc8d59',
+    0.5, '#fee08b',
+    0.75, '#d9ef8b',
+    1.0, '#1a9850',
   ];
 }
 
@@ -285,8 +302,18 @@ function onMouseMove(e) {
   const tooltip = document.getElementById('map-tooltip');
   const elev = feat.properties.elevation != null
     ? `${Number(feat.properties.elevation).toFixed(0)} m` : '—';
-  const val = feat.properties.value != null
-    ? `${Number(feat.properties.value).toFixed(3)} ${feat.properties.value_unit ?? ''}`.trim() : '';
+
+  let extraRow = '';
+  if (viewMode === 'suitability') {
+    const score = feat.properties.score;
+    extraRow = score != null
+      ? `<div class="tooltip-row"><span>Score (${currentCrop})</span><span>${Number(score).toFixed(3)}</span></div>`
+      : `<div class="tooltip-row"><span>Score</span><span>not scored</span></div>`;
+  } else {
+    const val = feat.properties.value != null
+      ? `${Number(feat.properties.value).toFixed(3)} ${feat.properties.value_unit ?? ''}`.trim() : '';
+    if (val) extraRow = `<div class="tooltip-row"><span>${formatFeatureName(currentFeature)}</span><span>${val}</span></div>`;
+  }
 
   tooltip.hidden = false;
   tooltip.style.left = `${e.point.x + 14}px`;
@@ -294,7 +321,7 @@ function onMouseMove(e) {
   tooltip.innerHTML = `
     <div class="tooltip-id">${h3id}</div>
     <div class="tooltip-row"><span>Elevation</span><span>${elev}</span></div>
-    ${val ? `<div class="tooltip-row"><span>${formatFeatureName(currentFeature)}</span><span>${val}</span></div>` : ''}
+    ${extraRow}
   `;
 }
 
@@ -322,14 +349,19 @@ async function fetchCells() {
   if (fetchController) fetchController.abort();
   fetchController = new AbortController();
 
-  const url = `/api/cells?bbox=${getBbox()}&feature=${encodeURIComponent(currentFeature)}&resolution=${currentResolution}`;
+  let url;
+  if (viewMode === 'suitability' && currentCrop) {
+    url = `/api/cells?bbox=${getBbox()}&mode=score&crop=${encodeURIComponent(currentCrop)}&resolution=9`;
+  } else {
+    url = `/api/cells?bbox=${getBbox()}&feature=${encodeURIComponent(currentFeature)}&resolution=${currentResolution}`;
+  }
 
   try {
     const resp = await fetch(url, { signal: fetchController.signal });
     if (!resp.ok) { console.warn('fetchCells failed', resp.status, url); return; }
     const geojson = await resp.json();
 
-    console.debug(`fetchCells res-${currentResolution} ${currentFeature}: ${geojson.features.length} cells`);
+    console.debug(`fetchCells ${viewMode}: ${geojson.features.length} cells`);
     geojson.features.forEach((f, i) => { f.id = i; });
     window._h3ToId = {};
     geojson.features.forEach(f => { window._h3ToId[f.properties.h3_id] = f.id; });
@@ -338,6 +370,111 @@ async function fetchCells() {
   } catch (err) {
     if (err.name !== 'AbortError') console.error('fetchCells error:', err);
   }
+}
+
+// ── View mode (Feature / Suitability) ─────────────────────────────────────
+async function loadCrops() {
+  const select = document.getElementById('crop-select');
+  if (!select || select.options.length > 1) return;  // already loaded
+  try {
+    const resp = await fetch('/api/crops');
+    if (!resp.ok) return;
+    const crops = await resp.json();
+    crops.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.name;
+      opt.textContent = c.name;
+      select.appendChild(opt);
+    });
+    if (crops.length > 0 && !currentCrop) {
+      currentCrop = crops[0].name;
+      select.value = currentCrop;
+    }
+  } catch (e) { console.warn('loadCrops failed', e); }
+}
+
+function switchViewMode(mode) {
+  if (mode === viewMode) return;
+  viewMode = mode;
+
+  document.querySelectorAll('.view-mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+
+  const scoreControls = document.getElementById('score-controls');
+  if (scoreControls) scoreControls.hidden = mode !== 'suitability';
+
+  if (mode === 'suitability') {
+    loadCrops().then(() => {
+      if (map.getLayer(FILL_LAYER)) {
+        map.setPaintProperty(FILL_LAYER, 'fill-color', buildScoreColorExpression());
+      }
+      if (currentMode !== 'cluster') fetchCells();
+    });
+  } else {
+    if (map.getLayer(FILL_LAYER)) {
+      map.setPaintProperty(FILL_LAYER, 'fill-color', buildColorExpression(currentFeature));
+    }
+    if (currentMode !== 'cluster') fetchCells();
+  }
+}
+
+function setCrop(cropName) {
+  currentCrop = cropName;
+  if (viewMode === 'suitability' && currentMode !== 'cluster') fetchCells();
+}
+
+// ── Scoring task management ────────────────────────────────────────────────
+async function runScoring() {
+  const btn = document.getElementById('btn-run-scoring');
+  const statusEl = document.getElementById('scoring-status');
+  if (!btn || !currentCrop) return;
+
+  btn.disabled = true;
+  if (statusEl) { statusEl.hidden = false; statusEl.textContent = 'Scoring…'; }
+
+  try {
+    const resp = await fetch('/api/score/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ crop: currentCrop }),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const { task_id } = await resp.json();
+    scoringTaskId = task_id;
+    pollScoringStatus(task_id);
+  } catch (e) {
+    console.error('runScoring failed', e);
+    btn.disabled = false;
+    if (statusEl) statusEl.textContent = 'Error';
+  }
+}
+
+function pollScoringStatus(taskId) {
+  const btn = document.getElementById('btn-run-scoring');
+  const statusEl = document.getElementById('scoring-status');
+
+  if (scoringPollTimer) clearInterval(scoringPollTimer);
+  scoringPollTimer = setInterval(async () => {
+    try {
+      const resp = await fetch(`/api/score/status/${taskId}`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+
+      if (data.status === 'SUCCESS') {
+        clearInterval(scoringPollTimer);
+        scoringPollTimer = null;
+        if (btn) btn.disabled = false;
+        if (statusEl) statusEl.textContent = `Done (${data.result?.crops_scored ?? '?'} crops)`;
+        if (currentMode !== 'cluster') fetchCells();
+      } else if (data.status === 'FAILURE') {
+        clearInterval(scoringPollTimer);
+        scoringPollTimer = null;
+        if (btn) btn.disabled = false;
+        if (statusEl) statusEl.textContent = 'Failed';
+      }
+    } catch (e) { /* network hiccup, keep polling */ }
+  }, 3000);
 }
 
 // ── Theme toggle ───────────────────────────────────────────────────────────
@@ -393,11 +530,26 @@ window.setFeature = setFeature;
 window.getCurrentFeature = () => currentFeature;
 window.getCurrentResolution = () => currentResolution;
 window.updateRadioAvailability = updateRadioAvailability;
+window.getViewMode = () => viewMode;
 
 document.addEventListener('DOMContentLoaded', () => {
   updateThemeButton();
   document.getElementById('theme-toggle')?.addEventListener('click', () => {
     switchTheme(currentTheme === 'dark' ? 'light' : 'dark');
   });
+
+  // View mode toggle buttons
+  document.querySelectorAll('.view-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchViewMode(btn.dataset.mode));
+  });
+
+  // Crop dropdown
+  document.getElementById('crop-select')?.addEventListener('change', e => {
+    setCrop(e.target.value);
+  });
+
+  // Run scoring button
+  document.getElementById('btn-run-scoring')?.addEventListener('click', runScoring);
+
   initMap();
 });

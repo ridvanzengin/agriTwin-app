@@ -5,6 +5,19 @@
 <!-- Theme toggle -->
 <button id="theme-toggle" class="map-theme-toggle" aria-label="Toggle map theme"></button>
 
+<!-- View mode toggle + crop selector -->
+<div id="view-controls" class="map-view-controls">
+  <div class="view-mode-toggle" role="group" aria-label="Map view mode">
+    <button id="btn-feature-mode"    class="view-mode-btn active" data-mode="feature">Feature</button>
+    <button id="btn-suitability-mode" class="view-mode-btn"        data-mode="suitability">Suitability</button>
+  </div>
+  <div id="score-controls" hidden>
+    <select id="crop-select" class="crop-select" aria-label="Select crop"></select>
+    <button id="btn-run-scoring" class="run-scoring-btn" title="Re-run scoring for all cells">⟳ Score</button>
+    <span id="scoring-status" class="scoring-status" hidden></span>
+  </div>
+</div>
+
 <!-- Current resolution badge (bottom-left, above scale control) -->
 <div id="resolution-badge" class="map-resolution-badge"></div>
 
@@ -35,8 +48,9 @@
       </button>
     </div>
     <div class="panel-tabs" role="tablist">
-      <button class="panel-tab active" data-tab="latest" role="tab">Latest</button>
-      <button class="panel-tab"        data-tab="historic" role="tab">Historic</button>
+      <button class="panel-tab active" data-tab="latest"      role="tab">Latest</button>
+      <button class="panel-tab"        data-tab="historic"    role="tab">Historic</button>
+      <button class="panel-tab"        data-tab="suitability" role="tab">Suitability</button>
     </div>
   </div>
 
@@ -94,6 +108,16 @@
       </div>
 
     </div><!-- /tab-historic -->
+
+    <!-- Suitability tab: crop scores bar chart -->
+    <div class="panel-tab-content" id="tab-suitability">
+      <div class="panel-card">
+        <h3 class="panel-card-title">Crop Suitability Scores</h3>
+        <div id="suitability-scores-list" class="suitability-list">
+          <p class="no-data-note">No scores yet — run scoring first.</p>
+        </div>
+      </div>
+    </div><!-- /tab-suitability -->
 
   </div><!-- /panel-body -->
 </aside>

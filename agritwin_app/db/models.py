@@ -55,7 +55,9 @@ class Crop(Base):
 
     crop_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
-    common_name: Mapped[str | None] = mapped_column(Text)
+    scientific_name: Mapped[str | None] = mapped_column(Text)
+    category: Mapped[str | None] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
 
 
 class CropRequirement(Base):
@@ -63,12 +65,12 @@ class CropRequirement(Base):
 
     requirement_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     crop_id: Mapped[int] = mapped_column(Integer, ForeignKey("crop.crop_id"), nullable=False)
-    feature_name: Mapped[str] = mapped_column(Text, nullable=False)
+    parameter: Mapped[str] = mapped_column(Text, nullable=False)
     min_value: Mapped[float | None] = mapped_column(Float)
-    optimal_min: Mapped[float | None] = mapped_column(Float)
-    optimal_max: Mapped[float | None] = mapped_column(Float)
+    optimal_value: Mapped[float | None] = mapped_column(Float)
     max_value: Mapped[float | None] = mapped_column(Float)
     weight: Mapped[float | None] = mapped_column(Float)
+    unit: Mapped[str | None] = mapped_column(Text)
 
 
 class DataSource(Base):

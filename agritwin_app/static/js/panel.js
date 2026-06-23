@@ -3,8 +3,10 @@
 // ── State ──────────────────────────────────────────────────────────────────
 let ndviChart = null;
 let weatherChart = null;
+let suitabilityChart = null;
 let isResizing = false;
 let cachedFeatures = null;  // populated once from GET /api/features
+let currentPanelH3Id = null;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function fmt(value, unit) {
@@ -29,6 +31,9 @@ function activateTab(tabName) {
   if (tabName === 'historic') {
     ndviChart?.resize();
     weatherChart?.resize();
+  }
+  if (tabName === 'suitability' && currentPanelH3Id) {
+    loadSuitabilityTab(currentPanelH3Id);
   }
 }
 
@@ -161,6 +166,74 @@ function renderWeatherChart(tempData, precipData) {
   });
 }
 
+// ── Suitability tab ───────────────────────────────────────────────────────
+function scoreToColor(score) {
+  if (score == null) return '#cccccc';
+  if (score >= 0.75) return '#1a9850';
+  if (score >= 0.5)  return '#d9ef8b';
+  if (score >= 0.25) return '#fee08b';
+  if (score > 0)     return '#fc8d59';
+  return '#d73027';
+}
+
+async function loadSuitabilityTab(h3Id) {
+  const list = document.getElementById('suitability-scores-list');
+  if (!list) return;
+  list.innerHTML = '<p class="no-data-note">Loading…</p>';
+
+  try {
+    const resp = await fetch(`/api/cells/${encodeURIComponent(h3Id)}/scores`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    if (!data.scores || !data.scores.length) {
+      list.innerHTML = '<p class="no-data-note">No scores yet — run scoring first.</p>';
+      return;
+    }
+
+    suitabilityChart = destroyChart(suitabilityChart);
+
+    const canvas = document.createElement('canvas');
+    canvas.id = 'chart-suitability';
+    list.innerHTML = '';
+    list.appendChild(canvas);
+
+    const labels = data.scores.map(s => s.crop_name);
+    const values = data.scores.map(s => s.score ?? 0);
+    const colors = data.scores.map(s => scoreToColor(s.score));
+
+    suitabilityChart = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Suitability score',
+          data: values,
+          backgroundColor: colors,
+          borderColor: colors,
+          borderWidth: 1,
+        }],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: {
+            min: 0, max: 1,
+            ticks: { color: CHART_TICK },
+            grid: { color: CHART_GRID },
+          },
+          y: { ticks: { color: CHART_TICK }, grid: { color: CHART_GRID } },
+        },
+      },
+    });
+  } catch (e) {
+    list.innerHTML = '<p class="no-data-note">Failed to load scores.</p>';
+    console.error('loadSuitabilityTab error:', e);
+  }
+}
+
 // ── Data fetching ─────────────────────────────────────────────────────────
 async function fetchTimeseries(h3Id, featureName) {
   const resp = await fetch(
@@ -171,6 +244,7 @@ async function fetchTimeseries(h3Id, featureName) {
 
 // ── Panel open ────────────────────────────────────────────────────────────
 async function openCellPanel(h3Id) {
+  currentPanelH3Id = h3Id;
   const panel = document.getElementById('cell-panel');
   const wasHidden = panel.hidden;
   panel.hidden = false;
@@ -233,6 +307,7 @@ function initResizeHandle() {
     document.documentElement.style.setProperty('--panel-width', `${newWidth}px`);
     ndviChart?.resize();
     weatherChart?.resize();
+    suitabilityChart?.resize();
   });
 
   document.addEventListener('mouseup', () => {
@@ -260,8 +335,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('panel-close').addEventListener('click', () => {
     document.getElementById('cell-panel').hidden = true;
+    currentPanelH3Id = null;
     ndviChart = destroyChart(ndviChart);
     weatherChart = destroyChart(weatherChart);
+    suitabilityChart = destroyChart(suitabilityChart);
   });
 
   // Delegate radio changes: any colorFeature radio click updates the map color
