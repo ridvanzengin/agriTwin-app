@@ -225,6 +225,77 @@ All 19 pytest tests pass. Verified end-to-end against the fully-loaded DB.
 
 **ETL prerequisite:** `crop_requirement` gains a `month INT NULL` column (ETL Alembic migration + `crops.yaml` rewrite). This must be done before implementing the scoring engine or the monthly detail API.
 
+### Suitability page UI specification
+
+#### Overall layout
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  navbar: [AgriTwin logo]  [Monitoring]  [Suitability ←here] │
+├─────────────────────────────────────────────────────────────┤
+│                                          │                   │
+│   MapLibre map (res-9 cells,             │  Right sidebar    │
+│   colored by suitability score)          │  (hidden until    │
+│                                          │   cell click)     │
+│                                          │                   │
+└─────────────────────────────────────────┴───────────────────┘
+```
+
+#### Map
+
+- Opens at zoom ~12 (res-9 visible immediately — no zoom ladder, no clustering).
+- Center: Konya Province (same as monitoring map).
+- Cells colored by suitability score for the **currently selected crop** (radio in sidebar Tab 1).
+- Color ramp: **0.0 = red → 0.5 = yellow → 1.0 = green** (traffic-light scale, standard agronomic convention).
+- Default crop on load: **Wheat** (most common in Konya; scores are pre-computed so no delay).
+- Clicking a cell opens the right sidebar and highlights that cell.
+- On `moveend`, fetches `GET /api/suitability/cells?bbox=...&crop=<selected_crop>` to color the viewport.
+
+#### Right sidebar
+
+Hidden on page load; appears when a cell is clicked. Same resize handle as the monitoring panel (`localStorage` persists width). Two tabs:
+
+---
+
+**Tab 1 — Crop Scores** (default active tab)
+
+Shows the suitability score for all 8 crops for the clicked cell.
+
+Layout per crop row:
+```
+○ Wheat        ████████████████░░░░  0.82
+○ Barley       █████████████░░░░░░░  0.68
+○ Sugar Beet   ██████░░░░░░░░░░░░░░  0.34
+...
+```
+
+- 8 rows, one per crop (Wheat, Barley, Sugar Beet, Sunflower, Maize, Chickpea, Lentil, Cotton).
+- Each row: radio button + crop name + CSS progress bar + numeric score (2 decimal places).
+- **Radio button is the crop selector** — clicking it changes the map coloring to that crop's scores.
+  No separate dropdown needed; the radio serves both purposes.
+- Default selected: Wheat.
+- Progress bar is pure CSS (`width: calc(score * 100%)`); no Chart.js needed for this tab.
+- Scores fetched from `GET /api/suitability/cells/<h3_id>` on cell click.
+
+---
+
+**Tab 2 — Monthly Detail**
+
+Shows how the cell's actual monthly climate compares to the selected crop's requirements for one weather feature at a time.
+
+- **Feature selector**: a `<select>` dropdown above the chart with the weather features that have monthly requirements for the current crop:
+  `Temperature (°C)` | `Precipitation (mm)` | `Solar Radiation (MJ/m²)` | `Min Temperature (°C)`
+  (Only show features that exist in crop_requirement for this crop.)
+- **Chart (Chart.js)**: x-axis = months Jan–Dec; two datasets:
+  1. **Shaded range band**: ideal min → ideal max for each month (only growing-season months have data; off-season months show no band). Rendered as a semi-transparent green fill between two lines.
+  2. **Actual line**: actual monthly mean value for this cell (averaged across ERA5 2018–2023). Dots on each month. Line color: green where inside the ideal range, red where outside.
+- Below the chart: a one-line summary, e.g. *"7 of 9 growing-season months within ideal range."*
+- Data fetched from `GET /api/suitability/cells/<h3_id>/monthly?crop=<selected_crop>`.
+  Response shape: `{ feature: "temperature_2m", months: [ { month: 1, actual: 0.8, req_min: -10, req_optimal: 0, req_max: 7 }, ... ] }`
+  Only months with a requirement row are included; the chart leaves gaps for non-growing months.
+
+---
+
 - [x] Alembic migration creates app-owned tables: `suitability_score`, `scenario`, `scenario_override`, `yield_prediction`, `profit_projection` (`alembic/versions/0001_create_app_tables.py`)
 - [ ] `GET /suitability` route + `suitability.html` template — own navbar item, MapLibre container, right sidebar (2 tabs)
 - [ ] `agritwin_app/views/suitability.py` — renders suitability page
