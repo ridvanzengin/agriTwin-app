@@ -1,9 +1,10 @@
 /* global maplibregl, formatFeatureName, WEATHER_FEATURE_NAMES, TERRAIN_FEATURE_NAMES_SET */
 
 // ── Constants ──────────────────────────────────────────────────────────────
-const CLUSTER_THRESHOLD   = 7;    // zoom < 7  → cluster mode
-const RES7_THRESHOLD      = 9;    // zoom 7–8  → res-7 polygons
-const ZOOM_THRESHOLD      = 11;   // zoom 9–10 → res-8 polygons, ≥ 11 → res-9
+const CLUSTER_THRESHOLD   = 7;    // zoom < 5  → cluster mode
+const RES6_THRESHOLD      = 8;    // zoom 5–6  → res-6 polygons (ERA5 cells, 1K cells)
+const RES7_THRESHOLD      = 10;    // zoom 7–8  → res-7 polygons
+const ZOOM_THRESHOLD      = 12;   // zoom 9–10 → res-8 polygons, ≥ 11 → res-9
 const TURKEY_CENTER       = [35.5, 39.0];
 const INITIAL_ZOOM        = 6;
 
@@ -20,12 +21,13 @@ const DEFAULT_FEATURE = 'elevation';
 
 // ── State ──────────────────────────────────────────────────────────────────
 let map;
-let currentMode       = 'cluster';  // 'cluster' | 'res7' | 'res8' | 'res9'
+let currentMode       = 'cluster';  // 'cluster' | 'res6' | 'res7' | 'res8' | 'res9'
 let currentFeature    = DEFAULT_FEATURE;
 let currentResolution = 9;
 let currentTheme      = localStorage.getItem('mapTheme') ?? 'light';
 let hoveredH3Id       = null;
 let fetchController   = null;
+let _zoomFetched      = false;  // suppress the moveend that always follows zoomend
 
 // ── Basemap styles ─────────────────────────────────────────────────────────
 const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
@@ -190,7 +192,8 @@ function setupLayers() {
   // Apply the mode appropriate for the current zoom level
   const initialMode = calcMode();
   currentMode = initialMode;
-  if (initialMode === 'res7') currentResolution = 7;
+  if (initialMode === 'res6') currentResolution = 6;
+  else if (initialMode === 'res7') currentResolution = 7;
   else if (initialMode === 'res8') currentResolution = 8;
   else currentResolution = 9;
   updateResolutionBadge();
@@ -206,6 +209,7 @@ function setupLayers() {
 function calcMode() {
   const z = map.getZoom();
   if (z < CLUSTER_THRESHOLD) return 'cluster';
+  if (z < RES6_THRESHOLD)    return 'res6';
   if (z < RES7_THRESHOLD)    return 'res7';
   if (z < ZOOM_THRESHOLD)    return 'res8';
   return 'res9';
@@ -225,7 +229,8 @@ function applyModeVisibility(mode) {
 function setMode(newMode) {
   if (newMode === currentMode) return;
   currentMode = newMode;
-  if (newMode === 'res7') currentResolution = 7;
+  if (newMode === 'res6') currentResolution = 6;
+  else if (newMode === 'res7') currentResolution = 7;
   else if (newMode === 'res8') currentResolution = 8;
   else if (newMode === 'res9') currentResolution = 9;
   updateResolutionBadge();
@@ -262,7 +267,13 @@ function setFeature(name) {
 
 // ── Map event handlers ─────────────────────────────────────────────────────
 function onZoomEnd() {
+  const prev = currentMode;
   setMode(calcMode());
+  // setMode calls fetchCells when mode changes; for same-mode zooms we call it
+  // directly here. Either way, the moveend that MapLibre always fires after
+  // zoomend must be suppressed to avoid a duplicate request.
+  _zoomFetched = true;
+  if (currentMode === prev && currentMode !== 'cluster') fetchCells();
 }
 
 function onMouseMove(e) {
@@ -367,8 +378,14 @@ function initMap() {
 
   map.on('load', () => { setupLayers(); });
 
-  // moveend: only re-fetch polygon cells; cluster source auto-updates
-  map.on('moveend', () => { if (currentMode !== 'cluster') fetchCells(); });
+  // moveend: only re-fetch polygon cells; cluster source auto-updates.
+  // MapLibre fires moveend after every zoomend too — skip that duplicate.
+  map.on('moveend', () => {
+    if (currentMode !== 'cluster') {
+      if (_zoomFetched) { _zoomFetched = false; return; }
+      fetchCells();
+    }
+  });
   map.on('zoomend', onZoomEnd);
   map.on('mousemove', HOVER_LAYER, onMouseMove);
   map.on('mouseleave', HOVER_LAYER, onMouseLeave);

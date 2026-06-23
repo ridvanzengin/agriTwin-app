@@ -64,10 +64,10 @@ def get_cells():
     res_raw = request.args.get("resolution", "9")
     try:
         resolution = int(res_raw)
-        if resolution not in (7, 8, 9):
+        if resolution not in (6, 7, 8, 9):
             raise ValueError
     except ValueError:
-        return jsonify({"error": "resolution must be 7, 8, or 9"}), 400
+        return jsonify({"error": "resolution must be 6, 7, 8, or 9"}), 400
 
     feature_name = request.args.get("feature")
     base_params = {"w": w, "s": s, "e": e, "n": n, "resolution": resolution}
@@ -75,7 +75,7 @@ def get_cells():
     with get_session() as session:
         if feature_name:
             if feature_name in TERRAIN_FEATURES:
-                # elevation/slope/aspect are spatial_cell columns (null at res-6, populated at res-9)
+                # elevation/slope/aspect are spatial_cell columns (null at res-6, populated at res-7/8/9)
                 unit = TERRAIN_FEATURES[feature_name]
                 col = feature_name  # safe: gated to TERRAIN_FEATURES keys
                 sql = text(f"""

@@ -82,22 +82,26 @@ else
     (cd /agritwin-etl && agritwin-etl db-load --table spatial_cell)
 fi
 
-# ── Stage 3: Aggregated observations (res-7/res-8) ───────────────────────────
-# These are small (~7.7M rows total) and load in minutes.
-# The web app becomes useful at zoom 7–10 as soon as this stage completes.
-echo "[loader] Stage 3: aggregated observations (res-7/res-8)"
+# ── Stage 3: Aggregated observations (res-6/res-7/res-8) ─────────────────────
+# These are small (~7.8M rows total) and load in minutes.
+# The web app becomes useful at zoom 5–10 as soon as this stage completes.
+echo "[loader] Stage 3: aggregated observations (res-6/res-7/res-8)"
+# Check both res-7 obs (soil/NDVI at medium zoom) AND res-6 agg obs (soil/NDVI at coarse zoom).
+# If res-6 agg is missing (e.g. added later), we re-run the whole stage to pick it up.
 obs_res7=$(_row_count_where "observation" \
     "h3_id IN (SELECT h3_id FROM spatial_cell WHERE resolution = 7 LIMIT 1)")
-if [ "${obs_res7}" -gt 0 ]; then
+obs_res6_agg=0
+if [ -f "/agritwin-etl/data/processed/observation/aggregated_res6.parquet" ]; then
+    obs_res6_agg=$(_row_count_where "observation" \
+        "h3_id IN (SELECT h3_id FROM spatial_cell WHERE resolution = 6 LIMIT 1) \
+         AND feature_id IN (SELECT feature_id FROM feature WHERE category != 'weather')")
+fi
+if [ "${obs_res7}" -gt 0 ] && [ "${obs_res6_agg}" -gt 0 ]; then
     echo "[loader] Aggregated observations already loaded — skipping"
 else
-    # Generate aggregated Parquet if not yet produced (idempotent: skips if files exist).
-    if [ ! -f "/agritwin-etl/data/processed/observation/aggregated_res7.parquet" ]; then
-        echo "[loader] Aggregating observations to res-7 and res-8 (reads raw Parquet, writes new files)..."
-        (cd /agritwin-etl && agritwin-etl aggregate)
-    else
-        echo "[loader] Aggregated Parquet already exists — skipping aggregation"
-    fi
+    # Generate aggregated Parquet files (idempotent: overwrites existing files).
+    echo "[loader] Aggregating observations to res-6, res-7 and res-8 (reads raw Parquet, writes new files)..."
+    (cd /agritwin-etl && agritwin-etl aggregate)
     echo "[loader] Loading aggregated observations..."
     (cd /agritwin-etl && agritwin-etl db-load-agg)
 fi
