@@ -56,8 +56,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://agritwin:agritwin@db:5432/agritwin
     volumes:
-      # Only the Parquet data files are needed — ETL source is baked into the image.
-      - ../agriTwin-etl/data/processed:/agritwin-etl/data/processed:ro
+      # Read-write: build-parent-cells and aggregate write new Parquet files here.
+      - ../agriTwin-etl/data/processed:/agritwin-etl/data/processed
     depends_on:
       migrate:
         condition: service_completed_successfully
