@@ -7,13 +7,15 @@ COPY agriTwin-app/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ── ETL db-load path deps ─────────────────────────────────────────────────────
-# The ETL's heavy geo stack (geopandas, rasterio, xarray…) is NOT needed here:
-# the db-load CLI only imports pandas / pyarrow / psycopg / sqlalchemy / typer.
+# Heavy geo stack (geopandas, rasterio, xarray…) is NOT needed here.
+# h3 and shapely ARE needed: build-parent-cells and aggregate use them.
 RUN pip install --no-cache-dir \
     "pandas>=2.1" \
     "pyarrow>=14.0" \
     "typer[all]>=0.12" \
-    "python-dotenv>=1.0"
+    "python-dotenv>=1.0" \
+    "h3>=4.0" \
+    "shapely>=2.0"
 
 # ── ETL source (baked in — data/ is volume-mounted at runtime) ───────────────
 # Copying individual directories avoids including .venv/, data/, tests/, etc.

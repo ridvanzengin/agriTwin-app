@@ -67,20 +67,6 @@ function buildLatestTab(cell, resolution) {
     if (byCategory[f.category] !== undefined) byCategory[f.category].push(f);
   }
 
-  // At res-6, soil/vegetation have no observations. Inject placeholder rows from
-  // the cached feature catalogue so the user sees the feature names (disabled,
-  // "—" values) instead of "No data for this cell".
-  if (resolution === 6 && cachedFeatures) {
-    if (!byCategory.soil.length)
-      byCategory.soil = cachedFeatures
-        .filter(f => f.category === 'soil')
-        .map(f => ({ ...f, latest_value: null, latest_timestamp: null }));
-    if (!byCategory.vegetation.length)
-      byCategory.vegetation = cachedFeatures
-        .filter(f => f.category === 'vegetation')
-        .map(f => ({ ...f, latest_value: null, latest_timestamp: null }));
-  }
-
   populateSection('section-weather',    'attrs-weather',    byCategory.weather);
   populateSection('section-soil',       'attrs-soil',       byCategory.soil);
   populateSection('section-vegetation', 'attrs-vegetation', byCategory.vegetation);
