@@ -1,6 +1,6 @@
 from datetime import datetime
 from geoalchemy2 import Geometry
-from sqlalchemy import BigInteger, Float, ForeignKey, Integer, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Float, ForeignKey, Integer, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -55,7 +55,9 @@ class Crop(Base):
 
     crop_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
-    common_name: Mapped[str | None] = mapped_column(Text)
+    scientific_name: Mapped[str | None] = mapped_column(Text)
+    category: Mapped[str | None] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
 
 
 class CropRequirement(Base):
@@ -63,12 +65,12 @@ class CropRequirement(Base):
 
     requirement_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     crop_id: Mapped[int] = mapped_column(Integer, ForeignKey("crop.crop_id"), nullable=False)
-    feature_name: Mapped[str] = mapped_column(Text, nullable=False)
+    parameter: Mapped[str] = mapped_column(Text, nullable=False)
     min_value: Mapped[float | None] = mapped_column(Float)
-    optimal_min: Mapped[float | None] = mapped_column(Float)
-    optimal_max: Mapped[float | None] = mapped_column(Float)
+    optimal_value: Mapped[float | None] = mapped_column(Float)
     max_value: Mapped[float | None] = mapped_column(Float)
     weight: Mapped[float | None] = mapped_column(Float)
+    unit: Mapped[str | None] = mapped_column(Text)
 
 
 class DataSource(Base):
@@ -123,7 +125,10 @@ class SuitabilityScore(Base):
     score: Mapped[float | None] = mapped_column(Float)
     scored_at: Mapped[datetime | None] = mapped_column()
 
-    __table_args__ = (UniqueConstraint("h3_id", "crop_id", "scenario_id"),)
+    # Uniqueness enforced by partial indexes in the migration, not a constraint,
+    # because PostgreSQL treats NULL != NULL in unique constraints (multiple baseline
+    # rows with scenario_id=NULL would be allowed, defeating idempotent upserts).
+    __table_args__ = ()
 
 
 class YieldPrediction(Base):

@@ -52,14 +52,14 @@ Both repos share the same PostgreSQL database. `agritwin-etl` occupies the defau
 ```
 agritwin-app/
   pyproject.toml
-  docker-compose.yml           # Four services: db, migrate, web, loader
-  Dockerfile                   # Build context is ..; bakes in ETL source, mounts data/ at runtime
+  docker-compose.yml           # Four services: db, migrate, web, loader — run from this directory
+  Dockerfile                   # Build context is .. (monorepo root); bakes in ETL source, mounts data/ at runtime
   migrate.sh                   # Runs both Alembic chains (ETL + app), then exits
   load.sh                      # Bulk-loads all Parquet tables in FK-safe order, then exits
   .env.example
   alembic/
     env.py                     # version_table = "alembic_version_app"
-    versions/                  # app-owned table migrations only (empty until Phase 3)
+    versions/                  # app-owned table migrations (0001_create_app_tables.py created in Phase 3)
   agritwin_app/
     __init__.py                # Flask app factory: create_app()
     config.py                  # Pydantic BaseSettings, reads .env
@@ -92,7 +92,11 @@ agritwin-app/
 
 ### Option A: Docker (recommended)
 
-Both repos must be siblings under the same parent directory (`~/personal/agriTwin-app/` and `~/personal/agriTwin-etl/`). The Dockerfile build context is `..` (the parent), and the loader service volume-mounts `../agriTwin-etl/data/processed`.
+Both repos live as subdirectories of the monorepo root (`agritwin/agriTwin-app/` and `agritwin/agriTwin-etl/`). Always run `docker compose` from **`agriTwin-app/`** — the build context `..` resolves to the monorepo root, which contains both repos.
+
+The `.dockerignore` that controls what gets sent to the Docker daemon lives at the **monorepo root** (not here). It excludes `agriTwin-etl/data/`, `.pgdata/`, `.venv/`, etc. Never add a local `.dockerignore` here — it will be ignored because Docker reads from the build context root.
+
+The loader service volume-mounts `../agriTwin-etl/data/processed` (relative to `agriTwin-app/`, which resolves to the monorepo's ETL data directory).
 
 ```bash
 cp .env.example .env             # set FLASK_SECRET_KEY (any string for local dev)
@@ -213,7 +217,7 @@ All 19 pytest tests pass. Verified end-to-end against the fully-loaded DB.
 
 **Goal:** Suitability scoring — compute per-cell, per-crop scores from `crop_requirement` data; display on map.
 
-- [ ] Alembic migration creates app-owned tables: `suitability_score`, `scenario`, `scenario_override`, `yield_prediction`, `profit_projection`
+- [x] Alembic migration creates app-owned tables: `suitability_score`, `scenario`, `scenario_override`, `yield_prediction`, `profit_projection` (`alembic/versions/0001_create_app_tables.py`)
 - [ ] `agritwin_app/scoring/engine.py` — pure scoring function: reads cell features + crop requirements, returns score 0–1
 - [ ] `flask score run [--crop NAME]` CLI command — bulk-scores all res-9 cells, writes to `suitability_score`; idempotent (upsert)
 - [ ] `POST /api/score/run` — triggers scoring in a background thread; returns `{"status": "started"}`
