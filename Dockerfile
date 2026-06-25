@@ -15,7 +15,9 @@ RUN pip install --no-cache-dir \
     "typer[all]>=0.12" \
     "python-dotenv>=1.0" \
     "h3>=4.0" \
-    "shapely>=2.0"
+    "shapely>=2.0" \
+    "celery[redis]>=5.3" \
+    "redis>=5.0"
 
 # ── ETL source (baked in — data/ is volume-mounted at runtime) ───────────────
 # Copying individual directories avoids including .venv/, data/, tests/, etc.
