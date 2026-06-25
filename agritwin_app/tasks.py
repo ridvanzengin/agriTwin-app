@@ -68,6 +68,18 @@ def compute_scenario_scores(self, scenario_id: int) -> dict:
                 _mark_failed(session, scenario_id, "no cells found in polygon")
                 return {"error": "no cells found in polygon"}
 
+            # Guard: very large polygons exhaust PostgreSQL shared memory when
+            # all cell IDs are passed as an ANY(:ids) array parameter.
+            MAX_CELLS = 30_000
+            if len(cell_rows) > MAX_CELLS:
+                reason = (
+                    f"polygon covers {len(cell_rows):,} cells; "
+                    f"limit is {MAX_CELLS:,}. Draw a smaller area."
+                )
+                _mark_failed(session, scenario_id, reason)
+                return {"error": reason}
+
+            import h3 as h3lib
             cell_h3_ids = [r["h3_id"] for r in cell_rows]
 
             cells_df = pd.DataFrame([
@@ -88,8 +100,9 @@ def compute_scenario_scores(self, scenario_id: int) -> dict:
 
             requirements_df = pd.DataFrame(list(req_rows))
 
-            # ── 4. Weather observations (res-6 parents of polygon cells) ──────
-            import h3 as h3lib
+            # ── 4. Weather observations (res-6 parents) ───────────────────────
+            # Unique res-6 parents are at most ~1,007 for all of Konya — always
+            # small enough to pass as an array parameter.
             parent_ids = list({h3lib.cell_to_parent(hid, 6) for hid in cell_h3_ids})
 
             weather_rows = session.execute(
@@ -107,16 +120,21 @@ def compute_scenario_scores(self, scenario_id: int) -> dict:
                 columns=["h3_id", "feature_name", "timestamp", "value"]
             )
 
-            # ── 5. Soil observations (res-9 polygon cells) ────────────────────
+            # ── 5. Soil observations — spatial join avoids large array ────────
+            # Passing tens of thousands of res-9 IDs as ANY(:ids) exhausts
+            # PostgreSQL shared memory; use ST_Within join instead.
             soil_rows = session.execute(
                 text("""
                     SELECT o.h3_id, f.name AS feature_name, o.timestamp, o.value
                     FROM observation o
                     JOIN feature f ON f.feature_id = o.feature_id
-                    WHERE o.h3_id = ANY(:ids)
-                      AND f.category = 'soil'
+                    JOIN spatial_cell sc
+                        ON sc.h3_id = o.h3_id AND sc.resolution = 9
+                    WHERE f.category = 'soil'
+                      AND ST_Within(sc.geometry,
+                            ST_SetSRID(ST_GeomFromText(:wkt), 4326))
                 """),
-                {"ids": cell_h3_ids},
+                {"wkt": polygon_wkt},
             ).mappings().all()
 
             soil_df = pd.DataFrame(list(soil_rows)) if soil_rows else pd.DataFrame(
