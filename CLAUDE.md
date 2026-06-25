@@ -4,9 +4,9 @@ This file is the working agreement for Claude Code in this repository. Read it b
 
 ## What this repo is
 
-AgriTwin's web application. A Flask + MapLibre tool that reads from the PostgreSQL data lake built by `agritwin-etl` and lets users browse H3 resolution-9 cells across Konya Province, inspect their environmental profiles (elevation, soil, weather history, NDVI), and — in later phases — run crop suitability scoring and scenario simulation.
+AgriTwin's web application. A Flask + MapLibre tool that reads from the PostgreSQL data lake built by `agritwin-etl` and lets users browse H3 resolution-9 cells across Konya Province, inspect their environmental profiles (elevation, soil, weather history, NDVI), and view per-cell crop suitability scores on a dedicated suitability page.
 
-**Phase 2 goal (first sprint):** display all H3 cells on a map; click any cell to see its full environmental profile.
+**Current phase:** Phase 3 complete — map + cell inspection (Phase 2) and crop suitability page (Phase 3) are both shipped. Phase 4 (scenario simulation) is next.
 
 ## What this repo is NOT
 
@@ -70,22 +70,28 @@ agritwin-app/
       __init__.py              # api Blueprint registration
       cells.py                 # GET /api/cells, /api/cells/<h3_id>, /api/cells/<h3_id>/timeseries
       features.py              # GET /api/features
+      suitability.py           # GET /api/suitability/cells, /cells/<h3_id>, /cells/<h3_id>/monthly
     views/
       __init__.py              # views Blueprint registration
       map.py                   # GET / → renders map.html
+      suitability.py           # GET /suitability → renders suitability.html
     templates/
-      base.html                # HTML boilerplate, MapLibre CDN links
-      map.html                 # map container + sidebar panel
+      base.html                # HTML boilerplate, MapLibre CDN links, navbar
+      map.html                 # monitoring map container + sidebar panel
+      suitability.html         # suitability map + two-tab sidebar (crop scores + monthly chart)
     static/
       js/
-        map.js                 # MapLibre init, bbox fetch on moveend, layer setup
-        panel.js               # cell click → sidebar populate + charts
+        map.js                 # MapLibre init, 5-level zoom ladder, bbox fetch, panel
+        panel.js               # monitoring cell click → sidebar populate + charts
+        suitability_map.js     # MapLibre choropleth at res-9; score color ramp; bbox fetch on moveend
+        suitability_panel.js   # Tab 1: 8-crop radio + progress bars; Tab 2: Chart.js band chart
       css/
         app.css
   tests/
     conftest.py                # Flask test client, DB session fixture
     test_api_cells.py
     test_api_features.py
+    test_api_suitability.py    # covers all three suitability API endpoints
 ```
 
 ## Local development setup
@@ -213,17 +219,17 @@ All 19 pytest tests pass. Verified end-to-end against the fully-loaded DB.
 - [x] NaN floats serialized as JSON `null` (prevents SyntaxError on res-6 cells)
 - [x] DB session pool exhaustion fixed — `get_session()` uses `@contextmanager`; all callers use `with get_session()`
 
-## Phase 3 definition of done — IN PROGRESS 🚧
+## Phase 3 definition of done — COMPLETE ✅ (2026-06-25)
 
 **Goal:** Suitability scoring — display per-cell, per-crop scores on a dedicated suitability page.
 
-**Architecture (locked in):**
+**Architecture:**
 - Scores are **computed in `agritwin-etl`** (not here): `agritwin-etl score` writes `suitability_score.parquet`; the loader loads it into `suitability_score`. This app is **read-only** for scores.
 - Suitability lives on its **own page** (`GET /suitability`) with its own map, its own sidebar, and its own JS files (`suitability_map.js`, `suitability_panel.js`). Zero changes to `map.js`/`panel.js`.
 - Scoring uses **monthly averages**, not latest-value snapshots: each month's ERA5 cell mean vs. that month's crop requirement. Soil/terrain use a single year-round comparison.
 - Suitability map is **res-9 only** — field-level analysis tool; no multi-resolution zoom ladder.
 
-**ETL prerequisite:** `crop_requirement` gains a `month INT NULL` column (ETL Alembic migration + `crops.yaml` rewrite). This must be done before implementing the scoring engine or the monthly detail API.
+**Note on `actual` values in Tab 2:** The `/api/suitability/cells/<h3_id>/monthly` endpoint fetches actual climate values live from the `observation` table. Soil features show "—" until SoilGrids observations finish loading in `load.sh` Stage 5.
 
 ### Suitability page UI specification
 
@@ -297,16 +303,17 @@ Shows how the cell's actual monthly climate compares to the selected crop's requ
 ---
 
 - [x] Alembic migration creates app-owned tables: `suitability_score`, `scenario`, `scenario_override`, `yield_prediction`, `profit_projection` (`alembic/versions/0001_create_app_tables.py`)
-- [ ] `GET /suitability` route + `suitability.html` template — own navbar item, MapLibre container, right sidebar (2 tabs)
-- [ ] `agritwin_app/views/suitability.py` — renders suitability page
-- [ ] `agritwin_app/api/suitability.py` — three endpoints:
+- [x] `GET /suitability` route + `suitability.html` template — own navbar item, MapLibre container, right sidebar (2 tabs)
+- [x] `agritwin_app/views/suitability.py` — renders suitability page
+- [x] `agritwin_app/api/suitability.py` — three endpoints:
   - `GET /api/suitability/cells?bbox=w,s,e,n&crop=<name>` — GeoJSON FeatureCollection with `score` (0–1) property
   - `GET /api/suitability/cells/<h3_id>` — returns `[{crop_name, score, scored_at}]` for all 8 crops
   - `GET /api/suitability/cells/<h3_id>/monthly?crop=<name>` — monthly actual means + requirements for all weather features (feeds Tab 2)
-- [ ] `suitability_map.js` — MapLibre init at res-9 zoom; score color ramp (0=red → 1=green); bbox fetch on moveend; no zoom ladder
-- [ ] `suitability_panel.js` — Tab 1: 8 crops with radio buttons + CSS progress bars (score as 0–100%); clicking radio recolors map. Tab 2: Chart.js band chart (shaded ideal range + actual monthly mean line) with feature selector
-- [ ] `base.html` — add "Suitability" navbar link
-- [ ] pytest covers all new API endpoints (target: ~25 total tests)
+- [x] `suitability_map.js` — MapLibre init at res-9 zoom; score color ramp (0=red → 1=green); bbox fetch on moveend; no zoom ladder
+- [x] `suitability_panel.js` — Tab 1: 8 crops with radio buttons + CSS progress bars (score as 0–100%); clicking radio recolors map. Tab 2: Chart.js band chart (shaded ideal range + actual monthly mean line) with feature selector
+- [x] `base.html` — "Suitability" navbar link added
+- [x] `load.sh` — Stage 4 added for suitability baseline scores
+- [x] pytest covers all three suitability API endpoints
 
 ## Things to avoid
 

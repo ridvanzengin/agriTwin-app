@@ -8,17 +8,21 @@ Browser
   │  HTTP
   ▼
 Flask (agritwin-app)  ─── port 5001 (Docker) / 5000 (host)
-  ├── GET /                → views/map.py → Jinja2 map.html
-  └── GET /api/*           → api/cells.py, api/features.py → JSON / GeoJSON
+  ├── GET /                → views/map.py → Jinja2 map.html         (monitoring)
+  ├── GET /suitability     → views/suitability.py → suitability.html (Phase 3)
+  ├── GET /api/cells/*     → api/cells.py     → JSON / GeoJSON
+  ├── GET /api/features    → api/features.py  → JSON
+  └── GET /api/suitability/* → api/suitability.py → JSON / GeoJSON  (Phase 3)
             │
             │  SQLAlchemy + GeoAlchemy2
             ▼
 PostgreSQL + PostGIS + TimescaleDB  ─── port 5433
   ├── ETL tables (agritwin-etl owns, migrations): spatial_cell, observation, feature, crop, …
-  └── App tables (agritwin-app owns, migrations): scenario, suitability_score, …  [Phase 3+]
+  └── App tables (agritwin-app owns, migrations): suitability_score (baseline loaded by ETL),
+                                                   scenario, scenario_override, …  [Phase 4+]
 ```
 
-No external services are called at query time. All data is pre-loaded into PostgreSQL by `agritwin-etl db-load`. Phase 2 reads only.
+No external services are called at query time. All data is pre-loaded into PostgreSQL by `agritwin-etl db-load` / `load.sh`.
 
 ## Docker service architecture
 
@@ -180,13 +184,13 @@ context.configure(
 
 Never run `agritwin-etl`'s Alembic from this repo and vice versa.
 
-## Phase 3+ additions (not built yet)
+## Phase additions
 
-| Phase | Addition | New tables |
-|---|---|---|
-| 3 | Crop suitability scoring (background task, reads observation + crop_requirement) | `suitability_score` |
-| 4 | Scenario simulation (user overrides + re-score) | `scenario`, `scenario_override` |
-| 5 | Yield prediction (statistical model from QCL historical data + scores) | `yield_prediction` |
-| 6 | Economic simulation (yield × price − costs) | `profit_projection` |
+| Phase | Addition | New tables | Status |
+|---|---|---|---|
+| 3 | Crop suitability scoring — ETL computes scores, app reads; dedicated `/suitability` page with choropleth map, crop radio selector, monthly climate chart | `suitability_score` | **COMPLETE ✅** |
+| 4 | Scenario simulation (user overrides + re-score) | `scenario`, `scenario_override` | not started |
+| 5 | Yield prediction (statistical model from QCL historical data + scores) | `yield_prediction` | not started |
+| 6 | Economic simulation (yield × price − costs) | `profit_projection` | not started |
 
-None of these require ETL schema changes or `agritwin-etl` migrations.
+Phases 4–6 require no ETL schema changes or `agritwin-etl` migrations.

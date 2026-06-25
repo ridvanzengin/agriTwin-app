@@ -59,20 +59,27 @@ agritwin-app picks up where agritwin-etl left off. The data lake is built. This 
 
 ---
 
-## Phase 3 — Crop suitability scoring
+## Phase 3 — Crop suitability scoring (COMPLETE ✅ 2026-06-25)
 
 **Goal:** color cells by how suitable they are for a user-selected crop, based on observed environmental conditions vs. agronomic requirements from `crop_requirement`.
 
 **New tables:** `suitability_score`
 
+**Architecture:** Scores are computed in `agritwin-etl` (`agritwin-etl score` → `suitability_score/data.parquet`); this app is read-only. Suitability lives on its own page (`GET /suitability`) with its own map, sidebar, and JS files — zero changes to the monitoring map/panel.
+
 ### Checklist
 
-- [ ] `suitability_score` SQLAlchemy model + Alembic migration
-- [ ] Scoring function: for each cell × crop, compute weighted distance from optimal value per feature
-- [ ] CLI command or background task to score all cells × all crops → write `suitability_score` rows
-- [ ] `GET /api/suitability?crop=wheat&bbox=w,s,e,n` — returns GeoJSON with score per cell
-- [ ] Suitability map layer with graduated color scale (green = suitable → red = unsuitable)
-- [ ] Crop selector in UI
+- [x] `suitability_score` SQLAlchemy model + Alembic migration (0001_create_app_tables.py)
+- [x] Scoring computed in ETL repo: monthly trapezoidal fuzzy membership; 2.77M rows (346,787 cells × 8 crops); score range 0.049–0.921
+- [x] `GET /api/suitability/cells?bbox=w,s,e,n&crop=<name>` — GeoJSON FeatureCollection with `score` per cell
+- [x] `GET /api/suitability/cells/<h3_id>` — all 8 crop scores for one cell
+- [x] `GET /api/suitability/cells/<h3_id>/monthly?crop=<name>` — monthly actual climate vs. crop requirement for Tab 2 chart
+- [x] `GET /suitability` — dedicated suitability page (own navbar item)
+- [x] `suitability_map.js` — MapLibre choropleth at res-9; score color ramp (red→yellow→green); bbox fetch on moveend
+- [x] `suitability_panel.js` — Tab 1: 8 crop radio buttons + CSS progress bars (clicking radio recolors map); Tab 2: Chart.js band chart (shaded ideal range + actual line) with feature selector
+- [x] `base.html` — "Suitability" navbar link added
+- [x] `load.sh` — Stage 4 loads baseline scores (~2.77M rows) after spatial cells and before raw observations
+- [x] pytest covers all three suitability API endpoints
 
 ---
 
