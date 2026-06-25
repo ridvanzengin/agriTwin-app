@@ -1,6 +1,15 @@
-/* global SCENARIO_ID */
+/* global SCENARIO_ID, SCENARIO_OVERRIDES, Chart */
 
 const CROP_ORDER = ['Wheat', 'Barley', 'Sugar Beet', 'Sunflower', 'Maize', 'Chickpea', 'Lentil', 'Cotton'];
+
+const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+const OVERRIDE_META = {
+    precipitation:      { label: 'Precipitation',    unit: 'mm/month' },
+    temperature_2m:     { label: 'Mean Temp',         unit: '°C' },
+    temperature_2m_min: { label: 'Min Temp',          unit: '°C' },
+    'soil_ph_0-5cm':    { label: 'Soil pH',           unit: '' },
+};
 
 const panel    = document.getElementById('scen-panel');
 const closeBtn = document.getElementById('scen-panel-close');
@@ -11,6 +20,17 @@ function scoreColor(s) {
     if (s >= 0.7) return '#22c55e';
     if (s >= 0.4) return '#f59e0b';
     return '#ef4444';
+}
+
+function trapScore(value, min, optimal, max) {
+    if (value === null || min === null || max === null) return 0;
+    if (value <= min || value >= max) return 0;
+    if (optimal !== null) {
+        if (value < optimal) return (value - min) / (optimal - min || 1);
+        if (value > optimal) return (max - value) / (max - optimal || 1);
+        return 1;
+    }
+    return (value - min) / (max - min || 1);
 }
 
 // ── Panel close ───────────────────────────────────────────────────────────────
@@ -44,23 +64,243 @@ closeBtn.addEventListener('click', () => panel.classList.add('hidden'));
     });
 }());
 
+// ── Override chips (rendered once when panel first opens) ─────────────────────
+let _overridesRendered = false;
+function renderOverrideChips() {
+    const bar = document.getElementById('scen-overrides-bar');
+    const entries = Object.entries(SCENARIO_OVERRIDES);
+    if (entries.length === 0) return;
+
+    bar.innerHTML = '';
+    entries.forEach(([key, delta]) => {
+        const meta = OVERRIDE_META[key];
+        if (!meta) return;
+        const sign = delta > 0 ? '+' : '';
+        const unitStr = meta.unit ? ` ${meta.unit}` : '';
+        const chip = document.createElement('span');
+        chip.className = 'scen-override-chip';
+        chip.textContent = `${meta.label}: ${sign}${delta}${unitStr}`;
+        bar.appendChild(chip);
+    });
+    bar.style.display = 'flex';
+}
+
+// ── Requirements section ──────────────────────────────────────────────────────
+const _reqCharts = {};
+
+function _destroyAllCharts() {
+    Object.keys(_reqCharts).forEach(k => { _reqCharts[k].destroy(); delete _reqCharts[k]; });
+}
+
+function _avgScore(months, valueKey) {
+    const valid = months.filter(m => m[valueKey] !== null && m.req_min !== null);
+    if (valid.length === 0) return null;
+    return valid.reduce((s, m) => s + trapScore(m[valueKey], m.req_min, m.req_optimal, m.req_max), 0) / valid.length;
+}
+
+function _buildReqChart(idx, req) {
+    if (_reqCharts[idx]) { _reqCharts[idx].destroy(); }
+    const canvas = document.getElementById(`scen-req-canvas-${idx}`);
+    if (!canvas) return;
+
+    const { label, unit, months } = req;
+    const unitSuffix = unit ? ` (${unit})` : '';
+
+    _reqCharts[idx] = new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels: MONTH_LABELS,
+            datasets: [
+                {
+                    label: 'Req Min',
+                    data: months.map(m => m.req_min),
+                    borderColor: 'rgba(34,197,94,0.25)',
+                    backgroundColor: 'rgba(34,197,94,0.25)',
+                    fill: false,
+                    borderDash: [3, 3],
+                    pointRadius: 0,
+                    tension: 0.3,
+                    order: 4,
+                },
+                {
+                    label: 'Ideal Range',
+                    data: months.map(m => m.req_max),
+                    borderColor: 'rgba(34,197,94,0.25)',
+                    backgroundColor: 'rgba(34,197,94,0.12)',
+                    fill: '-1',
+                    borderDash: [3, 3],
+                    pointRadius: 0,
+                    tension: 0.3,
+                    order: 3,
+                },
+                {
+                    label: `Baseline${unitSuffix}`,
+                    data: months.map(m => m.baseline_value),
+                    borderColor: '#64748b',
+                    backgroundColor: 'transparent',
+                    borderDash: [5, 3],
+                    borderWidth: 1.5,
+                    pointRadius: 3,
+                    pointBackgroundColor: '#64748b',
+                    tension: 0.3,
+                    order: 2,
+                },
+                {
+                    label: `Scenario${unitSuffix}`,
+                    data: months.map(m => m.scenario_value),
+                    borderColor: '#38bdf8',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    pointRadius: 3,
+                    pointBackgroundColor: '#38bdf8',
+                    tension: 0.3,
+                    order: 1,
+                },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    labels: {
+                        color: '#94a3b8',
+                        font: { size: 10 },
+                        boxWidth: 12,
+                        filter: item => item.text !== 'Req Min',
+                    },
+                    position: 'bottom',
+                },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            if (ctx.dataset.label === 'Req Min') return null;
+                            const v = ctx.parsed.y;
+                            return v !== null
+                                ? `${ctx.dataset.label}: ${v.toFixed(1)}${unit ? ' ' + unit : ''}`
+                                : null;
+                        },
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    ticks: { color: '#94a3b8', font: { size: 10 } },
+                    grid:  { color: 'rgba(148,163,184,0.08)' },
+                },
+                y: {
+                    ticks: { color: '#94a3b8', font: { size: 10 } },
+                    grid:  { color: 'rgba(148,163,184,0.08)' },
+                    title: unit ? { display: true, text: unit, color: '#94a3b8', font: { size: 10 } } : { display: false },
+                },
+            },
+        },
+    });
+}
+
+async function loadRequirementsSection(h3Id) {
+    const section = document.getElementById('scen-requirements-section');
+    _destroyAllCharts();
+
+    const resp = await fetch(`/api/scenarios/${SCENARIO_ID}/cells/${encodeURIComponent(h3Id)}/requirements`);
+    if (!resp.ok) { section.innerHTML = ''; return; }
+    const data = await resp.json();
+    if (data.length === 0) { section.innerHTML = ''; return; }
+
+    section.innerHTML = '';
+    const card = document.createElement('div');
+    card.className = 'panel-card';
+
+    const title = document.createElement('p');
+    title.className = 'panel-card-title';
+    title.textContent = 'Parameter Scores — Before / After';
+    card.appendChild(title);
+
+    data.forEach((req, i) => {
+        const { label, unit, delta, months } = req;
+
+        const beforeScore = _avgScore(months, 'baseline_value');
+        const afterScore  = _avgScore(months, 'scenario_value');
+
+        const beforeStr = beforeScore !== null ? beforeScore.toFixed(2) : '—';
+        const afterStr  = afterScore  !== null ? afterScore.toFixed(2)  : '—';
+        const diff      = beforeScore !== null && afterScore !== null ? afterScore - beforeScore : null;
+        const diffStr   = diff !== null ? `(${diff >= 0 ? '+' : ''}${diff.toFixed(2)})` : '';
+        const diffColor = diff === null ? '' : diff >= 0 ? '#22c55e' : '#ef4444';
+        const barWidth  = afterScore !== null ? (afterScore * 100).toFixed(1) + '%' : '0%';
+        const barColor  = scoreColor(afterScore);
+        const unitStr   = unit ? ` ${unit}` : '';
+        const sign      = delta > 0 ? '+' : '';
+
+        const rowEl = document.createElement('div');
+        rowEl.className = 'scen-req-row';
+        rowEl.innerHTML = `
+            <div class="scen-req-header">
+              <span class="scen-req-name">${label}</span>
+              <span class="scen-req-delta">${sign}${delta}${unitStr}</span>
+              <span class="scen-score-pair">
+                <span class="scen-before">${beforeStr}</span>
+                <span class="scen-arrow">→</span>
+                <span class="scen-after" style="color:${barColor}">${afterStr}</span>
+                ${diff !== null ? `<span class="scen-req-diff" style="color:${diffColor}">${diffStr}</span>` : ''}
+              </span>
+              <button class="scen-req-expand" aria-expanded="false" title="Show chart">▼</button>
+            </div>
+            <div class="suit-score-track">
+              <div class="suit-score-bar" style="width:${barWidth}; background:${barColor};"></div>
+            </div>
+            <div class="scen-req-chart-wrap" id="scen-req-wrap-${i}" style="display:none">
+              <canvas id="scen-req-canvas-${i}"></canvas>
+            </div>`;
+        card.appendChild(rowEl);
+
+        rowEl.querySelector('.scen-req-expand').addEventListener('click', function () {
+            const wrap = document.getElementById(`scen-req-wrap-${i}`);
+            const open = this.getAttribute('aria-expanded') === 'true';
+            if (open) {
+                wrap.style.display = 'none';
+                this.setAttribute('aria-expanded', 'false');
+                this.textContent = '▼';
+            } else {
+                wrap.style.display = 'block';
+                this.setAttribute('aria-expanded', 'true');
+                this.textContent = '▲';
+                _buildReqChart(i, req);
+            }
+        });
+    });
+
+    section.appendChild(card);
+}
+
 // ── Public entry point (called by scenario_result_map.js) ─────────────────────
 window.loadScenarioPanel = async function (h3Id) {
     cellIdEl.textContent = h3Id;
     panel.classList.remove('hidden');
 
-    const section = document.getElementById('scen-crops-section');
-    section.innerHTML = '<p style="color:#64748b;padding:1rem;font-size:0.8125rem">Loading…</p>';
+    if (!_overridesRendered) {
+        renderOverrideChips();
+        _overridesRendered = true;
+    }
 
-    const resp = await fetch(`/api/scenarios/${SCENARIO_ID}/cells/${encodeURIComponent(h3Id)}`);
-    if (!resp.ok) {
-        section.innerHTML = '<p style="color:#ef4444;padding:1rem;font-size:0.8125rem">Failed to load cell data.</p>';
+    const cropsSection = document.getElementById('scen-crops-section');
+    cropsSection.innerHTML = '<p style="color:#64748b;padding:0.5rem 0;font-size:0.8125rem">Loading…</p>';
+    document.getElementById('scen-requirements-section').innerHTML = '';
+
+    const [cropResp] = await Promise.all([
+        fetch(`/api/scenarios/${SCENARIO_ID}/cells/${encodeURIComponent(h3Id)}`),
+        loadRequirementsSection(h3Id),
+    ]);
+
+    if (!cropResp.ok) {
+        cropsSection.innerHTML = '<p style="color:#ef4444;padding:0.5rem 0;font-size:0.8125rem">Failed to load cell data.</p>';
         return;
     }
-    const data = await resp.json();
+    const data = await cropResp.json();
     const scoreMap = Object.fromEntries(data.map(r => [r.crop_name, r]));
 
-    section.innerHTML = '';
+    cropsSection.innerHTML = '';
     const card = document.createElement('div');
     card.className = 'panel-card';
 
@@ -98,10 +338,9 @@ window.loadScenarioPanel = async function (h3Id) {
         card.appendChild(rowEl);
     }
 
-    section.appendChild(card);
+    cropsSection.appendChild(card);
 
-    // Radio → recolor map
-    section.querySelectorAll('input[name="scenCrop"]').forEach(radio => {
+    cropsSection.querySelectorAll('input[name="scenCrop"]').forEach(radio => {
         radio.addEventListener('change', () => {
             window.currentCrop = radio.value;
             if (typeof window.refetchScenarioCells === 'function') {

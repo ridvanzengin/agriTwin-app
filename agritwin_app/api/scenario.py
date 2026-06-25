@@ -200,6 +200,89 @@ def get_scenario_cells(scenario_id: int):
         return Response(body, mimetype="application/geo+json")
 
 
+@bp.get("/scenarios/<int:scenario_id>/cells/<h3_id>/requirements")
+def get_scenario_cell_requirements(scenario_id: int, h3_id: str):
+    import h3 as h3lib
+
+    WEATHER = {"precipitation", "temperature_2m", "temperature_2m_min"}
+    FEATURE_META = {
+        "precipitation":      {"label": "Precipitation",    "unit": "mm/month"},
+        "temperature_2m":     {"label": "Mean Temperature", "unit": "°C"},
+        "temperature_2m_min": {"label": "Min Temperature",  "unit": "°C"},
+        "soil_ph_0-5cm":      {"label": "Soil pH",          "unit": ""},
+    }
+
+    with get_session() as session:
+        scen = session.execute(
+            text("SELECT overrides FROM scenario WHERE scenario_id = :id"),
+            {"id": scenario_id},
+        ).one_or_none()
+
+        if scen is None:
+            return jsonify({"error": "scenario not found"}), 404
+
+        active = {k: v for k, v in (scen.overrides or {}).items() if v != 0}
+        if not active:
+            return jsonify([])
+
+        parent_h3 = h3lib.cell_to_parent(h3_id, 6)
+        result = []
+
+        for feature_name, delta in active.items():
+            meta = FEATURE_META.get(feature_name)
+            if not meta:
+                continue
+
+            obs_h3 = parent_h3 if feature_name in WEATHER else h3_id
+
+            obs_rows = session.execute(text("""
+                SELECT EXTRACT(MONTH FROM o.timestamp)::int AS month,
+                       AVG(o.value) AS value
+                FROM observation o
+                JOIN feature f ON f.feature_id = o.feature_id
+                WHERE o.h3_id = :h3_id AND f.name = :feature_name
+                GROUP BY 1 ORDER BY 1
+            """), {"h3_id": obs_h3, "feature_name": feature_name}).mappings().all()
+
+            obs_by_month = {r["month"]: float(r["value"]) for r in obs_rows}
+
+            req_rows = session.execute(text("""
+                SELECT month,
+                       AVG(min_value)     AS req_min,
+                       AVG(optimal_value) AS req_optimal,
+                       AVG(max_value)     AS req_max
+                FROM crop_requirement
+                WHERE parameter = :param
+                GROUP BY month ORDER BY month
+            """), {"param": feature_name}).mappings().all()
+
+            req_by_month = {r["month"]: r for r in req_rows}
+
+            months_out = []
+            for m in range(1, 13):
+                baseline = obs_by_month.get(m)
+                scenario_val = (baseline + delta) if baseline is not None else None
+                req = req_by_month.get(m)
+                months_out.append({
+                    "month":          m,
+                    "baseline_value": baseline,
+                    "scenario_value": scenario_val,
+                    "req_min":     float(req["req_min"])     if req and req["req_min"]     is not None else None,
+                    "req_optimal": float(req["req_optimal"]) if req and req["req_optimal"] is not None else None,
+                    "req_max":     float(req["req_max"])     if req and req["req_max"]     is not None else None,
+                })
+
+            result.append({
+                "feature": feature_name,
+                "label":   meta["label"],
+                "unit":    meta["unit"],
+                "delta":   delta,
+                "months":  months_out,
+            })
+
+        return jsonify(result)
+
+
 @bp.get("/scenarios/<int:scenario_id>/cells/<h3_id>")
 def get_scenario_cell(scenario_id: int, h3_id: str):
     with get_session() as session:

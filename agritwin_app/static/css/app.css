@@ -697,3 +697,82 @@ body { display: flex; height: 100vh; }
 .scen-arrow  { color: #475569; }
 .scen-after  { font-weight: 600; }
 
+
+/* ─── Scenario result: override chips ───────────────────────────────────── */
+.scen-overrides-bar {
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  background: rgba(15,23,42,0.6);
+  border-bottom: 1px solid #334155;
+}
+
+.scen-override-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.625rem;
+  border-radius: 99px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(56,189,248,0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56,189,248,0.25);
+  white-space: nowrap;
+}
+
+/* ─── Scenario result: parameter requirement rows ───────────────────────── */
+.scen-req-row {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #1e293b;
+}
+.scen-req-row:last-child { border-bottom: none; }
+
+.scen-req-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.375rem;
+  flex-wrap: wrap;
+}
+
+.scen-req-name {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #e2e8f0;
+  flex: 1;
+  min-width: 0;
+}
+
+.scen-req-delta {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #38bdf8;
+  background: rgba(56,189,248,0.1);
+  border: 1px solid rgba(56,189,248,0.2);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  white-space: nowrap;
+}
+
+.scen-req-diff {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.scen-req-expand {
+  background: transparent;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 0.625rem;
+  padding: 0.15rem 0.5rem;
+  flex-shrink: 0;
+  transition: border-color 0.15s, color 0.15s;
+}
+.scen-req-expand:hover { border-color: #94a3b8; color: #e2e8f0; }
+
+.scen-req-chart-wrap {
+  padding-top: 0.625rem;
+  height: 170px;
+}

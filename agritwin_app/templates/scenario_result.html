@@ -21,9 +21,11 @@
           </svg>
         </button>
       </div>
+      <div id="scen-overrides-bar" class="scen-overrides-bar" style="display:none"></div>
     </div>
 
     <div class="panel-body">
+      <div id="scen-requirements-section"></div>
       <div id="scen-crops-section"></div>
     </div>
   </aside>
@@ -32,9 +34,10 @@
 
 {% block scripts %}
 <script>
-  const SCENARIO_ID    = {{ scenario_id | tojson }};
-  const POLYGON_BOUNDS = {{ polygon_bounds | safe }};
-  const POLYGON_GEOJSON = {{ polygon_geojson | tojson }};
+  const SCENARIO_ID       = {{ scenario_id | tojson }};
+  const POLYGON_BOUNDS    = {{ polygon_bounds | safe }};
+  const POLYGON_GEOJSON   = {{ polygon_geojson | tojson }};
+  const SCENARIO_OVERRIDES = {{ scenario_overrides | tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/scenario_result_map.js') }}"></script>
 <script src="{{ url_for('static', filename='js/scenario_result_panel.js') }}"></script>
