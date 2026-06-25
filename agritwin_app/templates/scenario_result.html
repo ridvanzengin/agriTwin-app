@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ scenario_name }} — AgriTwin{% endblock %}
+
+{% block content %}
+<div id="scenario-container">
+  <div id="scenario-map"></div>
+
+  <aside id="scen-panel" class="suit-panel hidden" aria-label="Scenario comparison">
+    <div id="scen-resize-handle" class="panel-resize-handle"></div>
+
+    <div class="panel-sticky-top">
+      <div class="panel-header">
+        <div class="panel-title-group">
+          <h2 class="panel-title">Before / After</h2>
+          <code id="scen-cell-id" class="panel-h3id">—</code>
+        </div>
+        <button id="scen-panel-close" class="panel-close" aria-label="Close panel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="panel-body">
+      <div id="scen-crops-section"></div>
+    </div>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const SCENARIO_ID    = {{ scenario_id | tojson }};
+  const POLYGON_BOUNDS = {{ polygon_bounds | safe }};
+  const POLYGON_GEOJSON = {{ polygon_geojson | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/scenario_result_map.js') }}"></script>
+<script src="{{ url_for('static', filename='js/scenario_result_panel.js') }}"></script>
+{% endblock %}

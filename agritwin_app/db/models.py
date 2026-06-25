@@ -1,6 +1,6 @@
 from datetime import datetime
 from geoalchemy2 import Geometry
-from sqlalchemy import BigInteger, Float, ForeignKey, Integer, Text
+from sqlalchemy import BigInteger, Float, ForeignKey, Integer, JSON, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -104,6 +104,11 @@ class Scenario(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime | None] = mapped_column()
+    polygon_geom: Mapped[object | None] = mapped_column(Geometry("POLYGON", srid=4326))
+    overrides: Mapped[dict | None] = mapped_column(JSON)
+    task_id: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str | None] = mapped_column(Text, default="pending")
+    scored_at: Mapped[datetime | None] = mapped_column()
 
 
 class ScenarioOverride(Base):
