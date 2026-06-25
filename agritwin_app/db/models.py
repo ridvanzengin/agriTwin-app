@@ -66,6 +66,7 @@ class CropRequirement(Base):
     requirement_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     crop_id: Mapped[int] = mapped_column(Integer, ForeignKey("crop.crop_id"), nullable=False)
     parameter: Mapped[str] = mapped_column(Text, nullable=False)
+    month: Mapped[int | None] = mapped_column(Integer)
     min_value: Mapped[float | None] = mapped_column(Float)
     optimal_value: Mapped[float | None] = mapped_column(Float)
     max_value: Mapped[float | None] = mapped_column(Float)

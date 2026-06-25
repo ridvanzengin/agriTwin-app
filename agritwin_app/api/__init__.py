@@ -2,4 +2,4 @@ from flask import Blueprint
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
-from . import cells, features  # noqa: E402, F401
+from . import cells, features, suitability  # noqa: E402, F401

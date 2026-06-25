@@ -186,25 +186,6 @@ body { display: flex; height: 100vh; }
 /* ─── Map container ─────────────────────────────────────────────────────── */
 #map { flex: 1; width: 100%; }
 
-/* ─── Map theme toggle button ───────────────────────────────────────────── */
-.map-theme-toggle {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  z-index: 10;
-  background: rgba(15, 23, 42, 0.88);
-  border: 1px solid rgba(51, 65, 85, 0.8);
-  border-radius: var(--radius);
-  padding: 7px 11px;
-  cursor: pointer;
-  font-size: 15px;
-  line-height: 1;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  transition: background var(--transition);
-}
-
-.map-theme-toggle:hover { background: rgba(30, 41, 59, 0.95); }
 
 /* ─── Resolution badge ──────────────────────────────────────────────────── */
 .map-resolution-badge {
@@ -411,3 +392,192 @@ body { display: flex; height: 100vh; }
 
 /* ─── MapLibre attribution tweak ────────────────────────────────────────── */
 .maplibregl-ctrl-attrib { font-size: 10px; }
+
+/* ─── Suitability page layout ───────────────────────────────────────────── */
+#suitability-container {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  position: relative;
+}
+
+#suitability-map {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ─── Suitability panel (right sidebar) ─────────────────────────────────── */
+.suit-panel {
+  position: relative;
+  width: var(--panel-width);
+  flex-shrink: 0;
+  background: var(--panel-bg);
+  border-left: 1px solid var(--panel-border);
+  overflow: hidden;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  animation: slideIn var(--transition) ease;
+}
+
+.suit-panel.hidden { display: none; }
+
+/* ─── Crop score rows (Tab 1) ───────────────────────────────────────────── */
+.suit-crop-row {
+  margin-bottom: 8px;
+}
+
+.suit-crop-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.suit-crop-label:has(input:checked) { color: var(--text-primary); }
+
+.suit-crop-label input[type="radio"] {
+  accent-color: var(--nav-accent);
+  flex-shrink: 0;
+  cursor: pointer;
+  width: 13px;
+  height: 13px;
+}
+
+.suit-crop-name {
+  width: 80px;
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+.suit-score-track {
+  flex: 1;
+  height: 6px;
+  background: #1e293b;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.suit-score-bar {
+  height: 100%;
+  background: var(--nav-accent);
+  border-radius: 3px;
+  transition: width 300ms ease;
+}
+
+.suit-score-value {
+  width: 32px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: ui-monospace, "SF Mono", monospace;
+  flex-shrink: 0;
+}
+
+/* ─── Feature breakdown rows ─────────────────────────────────────────────── */
+.feat-row {
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.feat-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
+.feat-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.feat-info {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  flex: 0 0 130px;
+  min-width: 0;
+}
+
+.feat-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feat-unit {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.feat-score-track {
+  flex: 1;
+  height: 5px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.feat-score-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 300ms ease;
+}
+
+.feat-score-val {
+  flex-shrink: 0;
+  width: 30px;
+  text-align: right;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: ui-monospace, "SF Mono", monospace;
+}
+
+/* ─── Weather feature expand button ─────────────────────────────────────── */
+.feat-expand-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 3px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: color var(--transition), background var(--transition);
+}
+
+.feat-expand-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.06); }
+
+.feat-chevron {
+  width: 14px;
+  height: 14px;
+  transition: transform var(--transition);
+}
+
+.feat-weather.expanded .feat-chevron { transform: rotate(180deg); }
+
+/* ─── Chart drawer ───────────────────────────────────────────────────────── */
+.feat-drawer { margin-top: 10px; }
+
+.feat-chart-wrap {
+  position: relative;
+  height: 155px;
+}
+
+.feat-chart-legend {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 10px;
+  color: rgba(34,197,94,0.7);
+  pointer-events: none;
+  z-index: 1;
+}
+

@@ -106,10 +106,23 @@ else
     (cd /agritwin-etl && agritwin-etl db-load-agg)
 fi
 
-# ── Stage 4: Raw observations (res-9/res-6) ───────────────────────────────────
+# ── Stage 4: Suitability scores (baseline, scenario_id IS NULL) ───────────────
+# Small load (~2.77M rows); loaded before raw obs so the suitability page is
+# usable while the large res-9 observation load runs in the background.
+echo "[loader] Stage 4: suitability scores (baseline)"
+suit_count=$(_row_count_where "suitability_score" "scenario_id IS NULL")
+if [ "${suit_count}" -gt 0 ]; then
+    echo "[loader] suitability_score baseline: ${suit_count} rows already loaded — skipping"
+else
+    echo "[loader] Loading suitability scores..."
+    (cd /agritwin-etl && agritwin-etl db-load --table suitability_score)
+fi
+
+# ── Stage 5: Raw observations (res-9/res-6) ───────────────────────────────────
 # Large load (~47M rows, 5–10 min via COPY FROM STDIN).
-# App already serves coarse zoom levels from Stage 3; this fills in full detail.
-echo "[loader] Stage 4: raw observations (res-9/res-6, ~47M rows)"
+# App already serves coarse zoom levels from Stage 3; suitability page is already
+# live from Stage 4. This fills in full res-9 detail for the monitoring page.
+echo "[loader] Stage 5: raw observations (res-9/res-6, ~47M rows)"
 obs_res9=$(_row_count_where "observation" \
     "h3_id IN (SELECT h3_id FROM spatial_cell WHERE resolution = 9 LIMIT 1)")
 if [ "${obs_res9}" -gt 0 ]; then

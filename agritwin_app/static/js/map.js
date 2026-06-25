@@ -24,34 +24,26 @@ let map;
 let currentMode       = 'cluster';  // 'cluster' | 'res6' | 'res7' | 'res8' | 'res9'
 let currentFeature    = DEFAULT_FEATURE;
 let currentResolution = 9;
-let currentTheme      = localStorage.getItem('mapTheme') ?? 'light';
 let hoveredH3Id       = null;
 let fetchController   = null;
 let _zoomFetched      = false;  // suppress the moveend that always follows zoomend
 
-// ── Basemap styles ─────────────────────────────────────────────────────────
+// ── Basemap style ──────────────────────────────────────────────────────────
 const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
-const BASEMAP_TILES = {
-  light: 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-  dark:  'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-};
-
-function makeStyle(theme) {
-  return {
-    version: 8,
-    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
-    sources: {
-      'carto-basemap': {
-        type: 'raster',
-        tiles: [BASEMAP_TILES[theme]],
-        tileSize: 256,
-        attribution: TILE_ATTR,
-      },
+const MAP_STYLE = {
+  version: 8,
+  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+  sources: {
+    'carto-basemap': {
+      type: 'raster',
+      tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'],
+      tileSize: 256,
+      attribution: TILE_ATTR,
     },
-    layers: [{ id: 'background', type: 'raster', source: 'carto-basemap' }],
-  };
-}
+  },
+  layers: [{ id: 'background', type: 'raster', source: 'carto-basemap' }],
+};
 
 // ── Color ramps ────────────────────────────────────────────────────────────
 const COLOR_RAMPS = {
@@ -169,13 +161,12 @@ function setupLayers() {
       },
     });
 
-    const outlineColor = currentTheme === 'dark' ? '#ffffff' : '#334155';
     map.addLayer({
       id: OUTLINE_LAYER,
       type: 'line',
       source: CELL_SOURCE,
       paint: {
-        'line-color': outlineColor,
+        'line-color': '#334155',
         'line-width': ['case', ['boolean', ['feature-state', 'hovered'], false], 1.8, 0.3],
         'line-opacity': 0.5,
       },
@@ -348,27 +339,11 @@ async function fetchCells() {
   }
 }
 
-// ── Theme toggle ───────────────────────────────────────────────────────────
-function updateThemeButton() {
-  const btn = document.getElementById('theme-toggle');
-  if (!btn) return;
-  btn.textContent = currentTheme === 'dark' ? '☀' : '🌙';
-  btn.title = currentTheme === 'dark' ? 'Switch to light map' : 'Switch to dark map';
-}
-
-function switchTheme(theme) {
-  currentTheme = theme;
-  localStorage.setItem('mapTheme', theme);
-  updateThemeButton();
-  map.setStyle(makeStyle(theme));
-  map.once('style.load', setupLayers);
-}
-
 // ── Init ──────────────────────────────────────────────────────────────────
 function initMap() {
   map = new maplibregl.Map({
     container: 'map',
-    style: makeStyle(currentTheme),
+    style: MAP_STYLE,
     center: TURKEY_CENTER,
     zoom: INITIAL_ZOOM,
   });
@@ -409,9 +384,5 @@ window.getCurrentResolution = () => currentResolution;
 window.updateRadioAvailability = updateRadioAvailability;
 
 document.addEventListener('DOMContentLoaded', () => {
-  updateThemeButton();
-  document.getElementById('theme-toggle')?.addEventListener('click', () => {
-    switchTheme(currentTheme === 'dark' ? 'light' : 'dark');
-  });
   initMap();
 });
