@@ -87,17 +87,17 @@ function onPolygonChange() {
             polygonTooLarge = true;
             polygonStatus.className = 'polygon-status error';
             polygonStatus.querySelector('.status-icon').innerHTML = svgAlert();
-            polygonStatus.querySelector('span').textContent =
+            polygonStatus.querySelector('.status-text').textContent =
                 `Too large (~${cellStr} cells). Draw a smaller polygon — limit is 30,000 cells.`;
         } else if (cellCount > WARN_CELLS) {
             polygonStatus.className = 'polygon-status warning';
             polygonStatus.querySelector('.status-icon').innerHTML = svgWarn();
-            polygonStatus.querySelector('span').textContent =
+            polygonStatus.querySelector('.status-text').textContent =
                 `Large area (~${cellStr} cells). Simulation may take a few minutes.`;
         } else {
             polygonStatus.className = 'polygon-status ready';
             polygonStatus.querySelector('.status-icon').innerHTML = svgOk();
-            polygonStatus.querySelector('span').textContent =
+            polygonStatus.querySelector('.status-text').textContent =
                 `Polygon ready (~${cellStr} cells)`;
         }
     } else {
@@ -105,7 +105,7 @@ function onPolygonChange() {
         polygonWktInput.value = '';
         polygonStatus.className = 'polygon-status empty';
         polygonStatus.querySelector('.status-icon').innerHTML = svgShield();
-        polygonStatus.querySelector('span').textContent =
+        polygonStatus.querySelector('.status-text').textContent =
             'No polygon drawn yet — use the polygon tool on the map';
     }
 
