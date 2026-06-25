@@ -36,15 +36,13 @@ map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
 const draw = new MapboxDraw({
     displayControlsDefault: false,
     controls: { polygon: true, trash: true },
-    // Start in simple_select; the polygon button switches to draw_polygon.
-    // We switch back to simple_select after draw.create so the drawn polygon
-    // is immediately selectable and the trash icon / delete key work.
-    defaultMode: 'simple_select',
+    defaultMode: 'draw_polygon',
 });
 map.addControl(draw);
 
 const polygonWktInput   = document.getElementById('polygon-wkt');
 const polygonStatus     = document.getElementById('polygon-status');
+const redrawBtn         = document.getElementById('redraw-btn');
 const submitBtn         = document.getElementById('submit-btn');
 const scenarioNameInput = document.getElementById('scenario-name');
 const submitError       = document.getElementById('submit-error');
@@ -75,14 +73,14 @@ function estimateCells(ringCoords) {
 let polygonTooLarge = false;
 
 function onPolygonChange() {
-    const data = draw.getAll();
-    const poly = data.features.find(f => f.geometry.type === 'Polygon');
+    const poly = draw.getAll().features.find(f => f.geometry.type === 'Polygon');
     polygonTooLarge = false;
 
     if (poly) {
-        const wkt         = ringToWkt(poly.geometry.coordinates[0]);
-        const cellCount   = estimateCells(poly.geometry.coordinates[0]);
-        const cellStr     = cellCount.toLocaleString();
+        redrawBtn.style.display = 'flex';
+        const wkt       = ringToWkt(poly.geometry.coordinates[0]);
+        const cellCount = estimateCells(poly.geometry.coordinates[0]);
+        const cellStr   = cellCount.toLocaleString();
         polygonWktInput.value = wkt;
 
         if (cellCount > MAX_CELLS) {
@@ -103,10 +101,12 @@ function onPolygonChange() {
                 `Polygon ready (~${cellStr} cells)`;
         }
     } else {
+        redrawBtn.style.display = 'none';
         polygonWktInput.value = '';
         polygonStatus.className = 'polygon-status empty';
         polygonStatus.querySelector('.status-icon').innerHTML = svgShield();
-        polygonStatus.querySelector('span').textContent = 'No polygon drawn yet';
+        polygonStatus.querySelector('span').textContent =
+            'No polygon drawn yet — use the polygon tool on the map';
     }
 
     validateForm();
@@ -118,30 +118,68 @@ function validateForm() {
     submitBtn.disabled = !(hasPolygon && hasName && !polygonTooLarge);
 }
 
-map.on('draw.create', (e) => {
-    // After drawing finishes, select the new polygon so trash icon / Delete key work.
-    draw.changeMode('simple_select', { featureIds: [e.features[0].id] });
+// ── Polygon lifecycle ─────────────────────────────────────────────────────────
+
+// Prevents re-entrant calls when draw.deleteAll() fires draw.delete /
+// draw.selectionchange as side-effects of our own clearPolygon().
+let _clearing = false;
+
+function clearPolygon() {
+    if (_clearing) return;
+    _clearing = true;
+    draw.deleteAll();
     onPolygonChange();
+    // Defer mode switch: Draw's internal event handlers run synchronously
+    // after draw.create / draw.delete; changeMode called here would be
+    // overridden by Draw's own cleanup.  setTimeout lets Draw finish first.
+    setTimeout(() => {
+        draw.changeMode('draw_polygon');
+        _clearing = false;
+    }, 0);
+}
+
+// After draw.create Draw resets the mode internally.  We defer our
+// simple_select switch so it runs after Draw's own post-create handling.
+map.on('draw.create', (e) => {
+    onPolygonChange();
+    const id = e.features[0].id;
+    setTimeout(() => {
+        draw.changeMode('simple_select', { featureIds: [id] });
+    }, 0);
 });
 
 map.on('draw.update', onPolygonChange);
 
+// Fired by trash icon and Delete/Backspace key (NOT by draw.deleteAll()).
 map.on('draw.delete', () => {
+    if (_clearing) return;
     onPolygonChange();
-    // Return to draw mode so user can draw a new polygon immediately.
-    draw.changeMode('draw_polygon');
+    setTimeout(() => draw.changeMode('draw_polygon'), 0);
 });
 
-// Right-click anywhere on the map: delete the current polygon (if any)
-// and return to draw mode.
-map.on('contextmenu', () => {
-    const all = draw.getAll();
-    if (all.features.length > 0) {
-        draw.deleteAll();
-        onPolygonChange();
-        draw.changeMode('draw_polygon');
+// Clicking outside the selected polygon deselects it → selection becomes
+// empty → treat as cancel and clear the polygon.
+let _ignoreSelChange = false;
+map.on('draw.selectionchange', (e) => {
+    if (_ignoreSelChange || _clearing) return;
+    if (e.features.length === 0 && draw.getAll().features.length > 0) {
+        _ignoreSelChange = true;
+        clearPolygon();
+        setTimeout(() => { _ignoreSelChange = false; }, 50);
     }
 });
+
+// Right-click: Draw intercepts the contextmenu event at the canvas level
+// before it reaches MapLibre's event bus.  Listen directly on the canvas.
+map.getCanvas().addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (draw.getAll().features.length > 0) {
+        clearPolygon();
+    }
+});
+
+// Explicit "Redraw" button in the form panel — always-works fallback.
+redrawBtn.addEventListener('click', clearPolygon);
 
 scenarioNameInput.addEventListener('input', validateForm);
 
