@@ -85,7 +85,7 @@ function renderOverrideChips() {
     bar.style.display = 'flex';
 }
 
-// ── Requirements section ──────────────────────────────────────────────────────
+// ── Requirement charts ────────────────────────────────────────────────────────
 const _reqCharts = {};
 
 function _destroyAllCharts() {
@@ -103,7 +103,7 @@ function _buildReqChart(idx, req) {
     const canvas = document.getElementById(`scen-req-canvas-${idx}`);
     if (!canvas) return;
 
-    const { label, unit, months } = req;
+    const { unit, months } = req;
     const unitSuffix = unit ? ` (${unit})` : '';
 
     _reqCharts[idx] = new Chart(canvas, {
@@ -112,7 +112,8 @@ function _buildReqChart(idx, req) {
             labels: MONTH_LABELS,
             datasets: [
                 {
-                    label: 'Req Min',
+                    // Bottom of ideal range — hidden from legend
+                    label: '_req_min',
                     data: months.map(m => m.req_min),
                     borderColor: 'rgba(34,197,94,0.25)',
                     backgroundColor: 'rgba(34,197,94,0.25)',
@@ -123,7 +124,7 @@ function _buildReqChart(idx, req) {
                     order: 4,
                 },
                 {
-                    label: 'Ideal Range',
+                    label: 'Ideal range',
                     data: months.map(m => m.req_max),
                     borderColor: 'rgba(34,197,94,0.25)',
                     backgroundColor: 'rgba(34,197,94,0.12)',
@@ -161,21 +162,24 @@ function _buildReqChart(idx, req) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            layout: { padding: { top: 2, right: 2, bottom: 2, left: 2 } },
             plugins: {
                 legend: {
-                    display: true,
+                    // Top-right, inside the chart area — does not reduce plot height
+                    position: 'top',
+                    align: 'end',
                     labels: {
                         color: '#94a3b8',
                         font: { size: 10 },
-                        boxWidth: 12,
-                        filter: item => item.text !== 'Req Min',
+                        boxWidth: 10,
+                        padding: 6,
+                        filter: item => !item.text.startsWith('_'),
                     },
-                    position: 'bottom',
                 },
                 tooltip: {
                     callbacks: {
                         label: ctx => {
-                            if (ctx.dataset.label === 'Req Min') return null;
+                            if (ctx.dataset.label.startsWith('_')) return null;
                             const v = ctx.parsed.y;
                             return v !== null
                                 ? `${ctx.dataset.label}: ${v.toFixed(1)}${unit ? ' ' + unit : ''}`
@@ -199,11 +203,16 @@ function _buildReqChart(idx, req) {
     });
 }
 
-async function loadRequirementsSection(h3Id) {
+// ── Requirements section ──────────────────────────────────────────────────────
+let _currentReqH3Id = null;
+
+async function loadRequirementsSection(h3Id, cropName) {
+    _currentReqH3Id = h3Id;
     const section = document.getElementById('scen-requirements-section');
     _destroyAllCharts();
 
-    const resp = await fetch(`/api/scenarios/${SCENARIO_ID}/cells/${encodeURIComponent(h3Id)}/requirements`);
+    const crop = encodeURIComponent(cropName || window.currentCrop || 'Wheat');
+    const resp = await fetch(`/api/scenarios/${SCENARIO_ID}/cells/${encodeURIComponent(h3Id)}/requirements?crop=${crop}`);
     if (!resp.ok) { section.innerHTML = ''; return; }
     const data = await resp.json();
     if (data.length === 0) { section.innerHTML = ''; return; }
@@ -226,29 +235,25 @@ async function loadRequirementsSection(h3Id) {
         const beforeStr = beforeScore !== null ? beforeScore.toFixed(2) : '—';
         const afterStr  = afterScore  !== null ? afterScore.toFixed(2)  : '—';
         const diff      = beforeScore !== null && afterScore !== null ? afterScore - beforeScore : null;
-        const diffStr   = diff !== null ? `(${diff >= 0 ? '+' : ''}${diff.toFixed(2)})` : '';
-        const diffColor = diff === null ? '' : diff >= 0 ? '#22c55e' : '#ef4444';
-        const barWidth  = afterScore !== null ? (afterScore * 100).toFixed(1) + '%' : '0%';
+        const barWidth  = afterScore  !== null ? (afterScore * 100).toFixed(1) + '%' : '0%';
         const barColor  = scoreColor(afterScore);
-        const unitStr   = unit ? ` ${unit}` : '';
-        const sign      = delta > 0 ? '+' : '';
 
+        // Row mirrors .suit-crop-row / .suit-crop-label layout exactly
         const rowEl = document.createElement('div');
-        rowEl.className = 'scen-req-row';
+        rowEl.className = 'suit-crop-row';
         rowEl.innerHTML = `
-            <div class="scen-req-header">
-              <span class="scen-req-name">${label}</span>
-              <span class="scen-req-delta">${sign}${delta}${unitStr}</span>
+            <div class="scen-req-item">
+              <span class="suit-crop-name">${label}</span>
               <span class="scen-score-pair">
                 <span class="scen-before">${beforeStr}</span>
                 <span class="scen-arrow">→</span>
                 <span class="scen-after" style="color:${barColor}">${afterStr}</span>
-                ${diff !== null ? `<span class="scen-req-diff" style="color:${diffColor}">${diffStr}</span>` : ''}
+                ${diff !== null ? `<span class="scen-req-diff" style="color:${diff >= 0 ? '#22c55e' : '#ef4444'}">(${diff >= 0 ? '+' : ''}${diff.toFixed(2)})</span>` : ''}
               </span>
+              <div class="suit-score-track">
+                <div class="suit-score-bar" style="width:${barWidth}; background:${barColor};"></div>
+              </div>
               <button class="scen-req-expand" aria-expanded="false" title="Show chart">▼</button>
-            </div>
-            <div class="suit-score-track">
-              <div class="suit-score-bar" style="width:${barWidth}; background:${barColor};"></div>
             </div>
             <div class="scen-req-chart-wrap" id="scen-req-wrap-${i}" style="display:none">
               <canvas id="scen-req-canvas-${i}"></canvas>
@@ -288,9 +293,10 @@ window.loadScenarioPanel = async function (h3Id) {
     cropsSection.innerHTML = '<p style="color:#64748b;padding:0.5rem 0;font-size:0.8125rem">Loading…</p>';
     document.getElementById('scen-requirements-section').innerHTML = '';
 
+    // Load crops and requirements in parallel
     const [cropResp] = await Promise.all([
         fetch(`/api/scenarios/${SCENARIO_ID}/cells/${encodeURIComponent(h3Id)}`),
-        loadRequirementsSection(h3Id),
+        loadRequirementsSection(h3Id, window.currentCrop || 'Wheat'),
     ]);
 
     if (!cropResp.ok) {
@@ -343,6 +349,10 @@ window.loadScenarioPanel = async function (h3Id) {
     cropsSection.querySelectorAll('input[name="scenCrop"]').forEach(radio => {
         radio.addEventListener('change', () => {
             window.currentCrop = radio.value;
+            // Reload requirements for the new crop (if a cell is open)
+            if (_currentReqH3Id) {
+                loadRequirementsSection(_currentReqH3Id, radio.value);
+            }
             if (typeof window.refetchScenarioCells === 'function') {
                 window.refetchScenarioCells();
             }

@@ -228,6 +228,8 @@ def get_scenario_cell_requirements(scenario_id: int, h3_id: str):
         parent_h3 = h3lib.cell_to_parent(h3_id, 6)
         result = []
 
+        crop_name = request.args.get("crop", "Wheat")
+
         for feature_name, delta in active.items():
             meta = FEATURE_META.get(feature_name)
             if not meta:
@@ -244,17 +246,25 @@ def get_scenario_cell_requirements(scenario_id: int, h3_id: str):
                 GROUP BY 1 ORDER BY 1
             """), {"h3_id": obs_h3, "feature_name": feature_name}).mappings().all()
 
-            obs_by_month = {r["month"]: float(r["value"]) for r in obs_rows}
+            if feature_name not in WEATHER and obs_rows:
+                # Soil features (e.g. SoilGrids) are a static snapshot with 1-2
+                # timestamps.  Broadcast the average across all 12 months so the
+                # chart shows a flat line rather than 1-2 isolated dots.
+                avg_val = sum(float(r["value"]) for r in obs_rows) / len(obs_rows)
+                obs_by_month = {m: avg_val for m in range(1, 13)}
+            else:
+                obs_by_month = {r["month"]: float(r["value"]) for r in obs_rows}
 
             req_rows = session.execute(text("""
-                SELECT month,
-                       AVG(min_value)     AS req_min,
-                       AVG(optimal_value) AS req_optimal,
-                       AVG(max_value)     AS req_max
-                FROM crop_requirement
-                WHERE parameter = :param
-                GROUP BY month ORDER BY month
-            """), {"param": feature_name}).mappings().all()
+                SELECT cr.month,
+                       cr.min_value     AS req_min,
+                       cr.optimal_value AS req_optimal,
+                       cr.max_value     AS req_max
+                FROM crop_requirement cr
+                JOIN crop c ON c.crop_id = cr.crop_id
+                WHERE cr.parameter = :param AND c.name = :crop_name
+                ORDER BY cr.month
+            """), {"param": feature_name, "crop_name": crop_name}).mappings().all()
 
             req_by_month = {r["month"]: r for r in req_rows}
 
