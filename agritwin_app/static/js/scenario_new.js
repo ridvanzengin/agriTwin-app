@@ -36,7 +36,10 @@ map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
 const draw = new MapboxDraw({
     displayControlsDefault: false,
     controls: { polygon: true, trash: true },
-    defaultMode: 'draw_polygon',
+    // Start in simple_select; the polygon button switches to draw_polygon.
+    // We switch back to simple_select after draw.create so the drawn polygon
+    // is immediately selectable and the trash icon / delete key work.
+    defaultMode: 'simple_select',
 });
 map.addControl(draw);
 
@@ -115,9 +118,31 @@ function validateForm() {
     submitBtn.disabled = !(hasPolygon && hasName && !polygonTooLarge);
 }
 
-map.on('draw.create', onPolygonChange);
+map.on('draw.create', (e) => {
+    // After drawing finishes, select the new polygon so trash icon / Delete key work.
+    draw.changeMode('simple_select', { featureIds: [e.features[0].id] });
+    onPolygonChange();
+});
+
 map.on('draw.update', onPolygonChange);
-map.on('draw.delete', onPolygonChange);
+
+map.on('draw.delete', () => {
+    onPolygonChange();
+    // Return to draw mode so user can draw a new polygon immediately.
+    draw.changeMode('draw_polygon');
+});
+
+// Right-click anywhere on the map: delete the current polygon (if any)
+// and return to draw mode.
+map.on('contextmenu', () => {
+    const all = draw.getAll();
+    if (all.features.length > 0) {
+        draw.deleteAll();
+        onPolygonChange();
+        draw.changeMode('draw_polygon');
+    }
+});
+
 scenarioNameInput.addEventListener('input', validateForm);
 
 // ── Form submission ───────────────────────────────────────────────────────────
