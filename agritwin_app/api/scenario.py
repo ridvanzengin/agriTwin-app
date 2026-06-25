@@ -60,6 +60,26 @@ def create_scenario():
     allowed_keys = {"precipitation", "temperature_2m", "temperature_2m_min", "soil_ph_0-5cm"}
     overrides = {k: float(v) for k, v in overrides.items() if k in allowed_keys}
 
+    MAX_CELLS = 30_000
+    with get_session() as session:
+        cell_count = session.execute(
+            text("""
+                SELECT COUNT(*)
+                FROM spatial_cell
+                WHERE resolution = 9
+                  AND ST_Within(geometry, ST_SetSRID(ST_GeomFromText(:polygon), 4326))
+            """),
+            {"polygon": polygon},
+        ).scalar_one()
+
+    if cell_count > MAX_CELLS:
+        return jsonify({
+            "error": (
+                f"Polygon is too large — it covers {cell_count:,} cells "
+                f"(limit: {MAX_CELLS:,}). Please draw a smaller area."
+            )
+        }), 400
+
     with get_session() as session:
         result = session.execute(
             text("""

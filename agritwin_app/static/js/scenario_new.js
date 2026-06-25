@@ -18,6 +18,11 @@ const LIGHT_STYLE = {
     layers: [{ id: 'background', type: 'raster', source: 'carto-basemap' }],
 };
 
+// H3 res-9 cell area in km² (global average)
+const H3_RES9_AREA_KM2 = 0.105;
+const MAX_CELLS        = 30_000;
+const WARN_CELLS       = 10_000;
+
 const map = new maplibregl.Map({
     container: 'draw-map',
     style: LIGHT_STYLE,
@@ -35,42 +40,84 @@ const draw = new MapboxDraw({
 });
 map.addControl(draw);
 
-const polygonWktInput  = document.getElementById('polygon-wkt');
-const polygonStatus    = document.getElementById('polygon-status');
-const submitBtn        = document.getElementById('submit-btn');
+const polygonWktInput   = document.getElementById('polygon-wkt');
+const polygonStatus     = document.getElementById('polygon-status');
+const submitBtn         = document.getElementById('submit-btn');
 const scenarioNameInput = document.getElementById('scenario-name');
-const submitError      = document.getElementById('submit-error');
+const submitError       = document.getElementById('submit-error');
 
 function ringToWkt(coords) {
     const ring = coords.map(([lng, lat]) => `${lng} ${lat}`).join(', ');
     return `POLYGON((${ring}))`;
 }
 
+// Shoelace formula in km² using per-polygon centre latitude for accuracy.
+function approxAreaKm2(ringCoords) {
+    const avgLat = ringCoords.reduce((s, c) => s + c[1], 0) / ringCoords.length;
+    const kmPerLng = Math.cos(avgLat * Math.PI / 180) * 111.32;
+    const kmPerLat = 110.54;
+    let area = 0;
+    const n = ringCoords.length;
+    for (let i = 0; i < n - 1; i++) {
+        area += (ringCoords[i][0] * kmPerLng)     * (ringCoords[i + 1][1] * kmPerLat)
+              - (ringCoords[i + 1][0] * kmPerLng) * (ringCoords[i][1] * kmPerLat);
+    }
+    return Math.abs(area) / 2;
+}
+
+function estimateCells(ringCoords) {
+    return Math.round(approxAreaKm2(ringCoords) / H3_RES9_AREA_KM2);
+}
+
+let polygonTooLarge = false;
+
 function onPolygonChange() {
     const data = draw.getAll();
     const poly = data.features.find(f => f.geometry.type === 'Polygon');
+    polygonTooLarge = false;
+
     if (poly) {
-        const wkt = ringToWkt(poly.geometry.coordinates[0]);
+        const wkt         = ringToWkt(poly.geometry.coordinates[0]);
+        const cellCount   = estimateCells(poly.geometry.coordinates[0]);
+        const cellStr     = cellCount.toLocaleString();
         polygonWktInput.value = wkt;
-        polygonStatus.className = 'polygon-status ready';
-        polygonStatus.querySelector('span').textContent = 'Polygon drawn — ready';
+
+        if (cellCount > MAX_CELLS) {
+            polygonTooLarge = true;
+            polygonStatus.className = 'polygon-status error';
+            polygonStatus.querySelector('.status-icon').innerHTML = svgAlert();
+            polygonStatus.querySelector('span').textContent =
+                `Too large (~${cellStr} cells). Draw a smaller polygon — limit is 30,000 cells.`;
+        } else if (cellCount > WARN_CELLS) {
+            polygonStatus.className = 'polygon-status warning';
+            polygonStatus.querySelector('.status-icon').innerHTML = svgWarn();
+            polygonStatus.querySelector('span').textContent =
+                `Large area (~${cellStr} cells). Simulation may take a few minutes.`;
+        } else {
+            polygonStatus.className = 'polygon-status ready';
+            polygonStatus.querySelector('.status-icon').innerHTML = svgOk();
+            polygonStatus.querySelector('span').textContent =
+                `Polygon ready (~${cellStr} cells)`;
+        }
     } else {
         polygonWktInput.value = '';
         polygonStatus.className = 'polygon-status empty';
+        polygonStatus.querySelector('.status-icon').innerHTML = svgShield();
         polygonStatus.querySelector('span').textContent = 'No polygon drawn yet';
     }
+
     validateForm();
 }
 
 function validateForm() {
     const hasPolygon = polygonWktInput.value.trim() !== '';
     const hasName    = scenarioNameInput.value.trim() !== '';
-    submitBtn.disabled = !(hasPolygon && hasName);
+    submitBtn.disabled = !(hasPolygon && hasName && !polygonTooLarge);
 }
 
-map.on('draw.create',  onPolygonChange);
-map.on('draw.update',  onPolygonChange);
-map.on('draw.delete',  onPolygonChange);
+map.on('draw.create', onPolygonChange);
+map.on('draw.update', onPolygonChange);
+map.on('draw.delete', onPolygonChange);
 scenarioNameInput.addEventListener('input', validateForm);
 
 // ── Form submission ───────────────────────────────────────────────────────────
@@ -83,10 +130,10 @@ submitBtn.addEventListener('click', async () => {
         name:     scenarioNameInput.value.trim(),
         polygon:  polygonWktInput.value,
         overrides: {
-            precipitation:       parseFloat(document.getElementById('ov-precip').value) || 0,
-            temperature_2m:      parseFloat(document.getElementById('ov-temp').value) || 0,
-            temperature_2m_min:  parseFloat(document.getElementById('ov-tmin').value) || 0,
-            'soil_ph_0-5cm':     parseFloat(document.getElementById('ov-ph').value) || 0,
+            precipitation:      parseFloat(document.getElementById('ov-precip').value) || 0,
+            temperature_2m:     parseFloat(document.getElementById('ov-temp').value) || 0,
+            temperature_2m_min: parseFloat(document.getElementById('ov-tmin').value) || 0,
+            'soil_ph_0-5cm':    parseFloat(document.getElementById('ov-ph').value) || 0,
         },
     };
 
@@ -112,3 +159,17 @@ submitBtn.addEventListener('click', async () => {
         validateForm();
     }
 });
+
+// ── SVG helpers ───────────────────────────────────────────────────────────────
+function svgShield() {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
+}
+function svgOk() {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>';
+}
+function svgWarn() {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+}
+function svgAlert() {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+}

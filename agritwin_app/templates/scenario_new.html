@@ -60,21 +60,20 @@
   }
   .polygon-status {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.5rem;
     padding: 0.5rem 0.75rem;
     border-radius: 6px;
     background: #0f172a;
     border: 1px solid #334155;
     font-size: 0.8125rem;
+    line-height: 1.4;
   }
-  .polygon-status.ready {
-    border-color: #22c55e;
-    color: #22c55e;
-  }
-  .polygon-status.empty {
-    color: #64748b;
-  }
+  .status-icon { flex-shrink: 0; margin-top: 1px; }
+  .polygon-status.ready   { border-color: #22c55e; color: #22c55e; }
+  .polygon-status.warning { border-color: #f59e0b; color: #f59e0b; background: rgba(245,158,11,0.06); }
+  .polygon-status.error   { border-color: #ef4444; color: #ef4444; background: rgba(239,68,68,0.06); }
+  .polygon-status.empty   { color: #64748b; }
   .btn-submit {
     padding: 0.625rem 1.25rem;
     background: #22c55e;
@@ -118,9 +117,11 @@
     </div>
 
     <div id="polygon-status" class="polygon-status empty">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-      </svg>
+      <span class="status-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+      </span>
       <span>No polygon drawn yet</span>
     </div>
     <input type="hidden" id="polygon-wkt" />
