@@ -263,23 +263,41 @@ def get_scenario_cell_requirements(scenario_id: int, h3_id: str):
                 FROM crop_requirement cr
                 JOIN crop c ON c.crop_id = cr.crop_id
                 WHERE cr.parameter = :param AND c.name = :crop_name
-                ORDER BY cr.month
+                ORDER BY cr.month NULLS FIRST
             """), {"param": feature_name, "crop_name": crop_name}).mappings().all()
 
-            req_by_month = {r["month"]: r for r in req_rows}
+            # Separate year-round (month=NULL) from growing-season monthly rows.
+            # Soil/terrain requirements have month=NULL; weather requirements are
+            # month-specific.  Year-round acts as a fallback for all 12 months.
+            yearround_req = None
+            req_by_month: dict = {}
+            for r in req_rows:
+                if r["month"] is None:
+                    yearround_req = r
+                else:
+                    req_by_month[int(r["month"])] = r
 
             months_out = []
             for m in range(1, 13):
-                baseline = obs_by_month.get(m)
+                req = req_by_month.get(m) or yearround_req
+                req_min = float(req["req_min"]) if req and req["req_min"] is not None else None
+                req_opt = float(req["req_optimal"]) if req and req["req_optimal"] is not None else None
+                req_max = float(req["req_max"]) if req and req["req_max"] is not None else None
+
+                # For weather features: null out observations for months without a
+                # crop requirement (off-season).  This mirrors the suitability Tab 2
+                # chart which only shows the actual line during the growing season.
+                has_req = req_min is not None
+                baseline = obs_by_month.get(m) if has_req else None
                 scenario_val = (baseline + delta) if baseline is not None else None
-                req = req_by_month.get(m)
+
                 months_out.append({
                     "month":          m,
                     "baseline_value": baseline,
                     "scenario_value": scenario_val,
-                    "req_min":     float(req["req_min"])     if req and req["req_min"]     is not None else None,
-                    "req_optimal": float(req["req_optimal"]) if req and req["req_optimal"] is not None else None,
-                    "req_max":     float(req["req_max"])     if req and req["req_max"]     is not None else None,
+                    "req_min":        req_min,
+                    "req_optimal":    req_opt,
+                    "req_max":        req_max,
                 })
 
             result.append({

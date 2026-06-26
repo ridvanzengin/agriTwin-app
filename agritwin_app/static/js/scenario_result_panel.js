@@ -112,30 +112,31 @@ function _buildReqChart(idx, req) {
             labels: MONTH_LABELS,
             datasets: [
                 {
-                    // Bottom of ideal range — hidden from legend
+                    // Bottom edge of ideal range — no visible border, just provides the fill anchor
                     label: '_req_min',
                     data: months.map(m => m.req_min),
-                    borderColor: 'rgba(34,197,94,0.25)',
-                    backgroundColor: 'rgba(34,197,94,0.25)',
+                    borderColor: 'transparent',
+                    backgroundColor: 'transparent',
+                    borderWidth: 0,
                     fill: false,
-                    borderDash: [3, 3],
                     pointRadius: 0,
                     tension: 0.3,
                     order: 4,
                 },
                 {
-                    label: 'Ideal range',
+                    // Top edge fills down to req_min, forming the green ideal-range band
+                    label: '_req_max',
                     data: months.map(m => m.req_max),
-                    borderColor: 'rgba(34,197,94,0.25)',
-                    backgroundColor: 'rgba(34,197,94,0.12)',
+                    borderColor: 'transparent',
+                    backgroundColor: 'rgba(34,197,94,0.18)',
+                    borderWidth: 0,
                     fill: '-1',
-                    borderDash: [3, 3],
                     pointRadius: 0,
                     tension: 0.3,
                     order: 3,
                 },
                 {
-                    label: `Baseline${unitSuffix}`,
+                    label: 'Baseline',
                     data: months.map(m => m.baseline_value),
                     borderColor: '#64748b',
                     backgroundColor: 'transparent',
@@ -147,7 +148,7 @@ function _buildReqChart(idx, req) {
                     order: 2,
                 },
                 {
-                    label: `Scenario${unitSuffix}`,
+                    label: 'Scenario',
                     data: months.map(m => m.scenario_value),
                     borderColor: '#38bdf8',
                     backgroundColor: 'transparent',
@@ -164,18 +165,7 @@ function _buildReqChart(idx, req) {
             maintainAspectRatio: false,
             layout: { padding: { top: 2, right: 2, bottom: 2, left: 2 } },
             plugins: {
-                legend: {
-                    // Top-right, inside the chart area — does not reduce plot height
-                    position: 'top',
-                    align: 'end',
-                    labels: {
-                        color: '#94a3b8',
-                        font: { size: 10 },
-                        boxWidth: 10,
-                        padding: 6,
-                        filter: item => !item.text.startsWith('_'),
-                    },
-                },
+                legend: { display: false },
                 tooltip: {
                     callbacks: {
                         label: ctx => {
