@@ -186,25 +186,6 @@ body { display: flex; height: 100vh; }
 /* ─── Map container ─────────────────────────────────────────────────────── */
 #map { flex: 1; width: 100%; }
 
-/* ─── Map theme toggle button ───────────────────────────────────────────── */
-.map-theme-toggle {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  z-index: 10;
-  background: rgba(15, 23, 42, 0.88);
-  border: 1px solid rgba(51, 65, 85, 0.8);
-  border-radius: var(--radius);
-  padding: 7px 11px;
-  cursor: pointer;
-  font-size: 15px;
-  line-height: 1;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  transition: background var(--transition);
-}
-
-.map-theme-toggle:hover { background: rgba(30, 41, 59, 0.95); }
 
 /* ─── Resolution badge ──────────────────────────────────────────────────── */
 .map-resolution-badge {
@@ -411,3 +392,364 @@ body { display: flex; height: 100vh; }
 
 /* ─── MapLibre attribution tweak ────────────────────────────────────────── */
 .maplibregl-ctrl-attrib { font-size: 10px; }
+
+/* ─── Suitability page layout ───────────────────────────────────────────── */
+#suitability-container {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  position: relative;
+}
+
+#suitability-map {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ─── Suitability panel (right sidebar) ─────────────────────────────────── */
+.suit-panel {
+  position: relative;
+  width: var(--panel-width);
+  flex-shrink: 0;
+  background: var(--panel-bg);
+  border-left: 1px solid var(--panel-border);
+  overflow: hidden;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  animation: slideIn var(--transition) ease;
+}
+
+.suit-panel.hidden { display: none; }
+
+/* ─── Crop score rows (Tab 1) ───────────────────────────────────────────── */
+.suit-crop-row {
+  margin-bottom: 8px;
+}
+
+.suit-crop-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.suit-crop-label:has(input:checked) { color: var(--text-primary); }
+
+.suit-crop-label input[type="radio"] {
+  accent-color: var(--nav-accent);
+  flex-shrink: 0;
+  cursor: pointer;
+  width: 13px;
+  height: 13px;
+}
+
+.suit-crop-name {
+  width: 80px;
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+.suit-score-track {
+  flex: 1;
+  height: 6px;
+  background: #1e293b;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.suit-score-bar {
+  height: 100%;
+  background: var(--nav-accent);
+  border-radius: 3px;
+  transition: width 300ms ease;
+}
+
+.suit-score-value {
+  width: 32px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: ui-monospace, "SF Mono", monospace;
+  flex-shrink: 0;
+}
+
+/* ─── Feature breakdown rows ─────────────────────────────────────────────── */
+.feat-row {
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.feat-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
+.feat-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.feat-info {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  flex: 0 0 130px;
+  min-width: 0;
+}
+
+.feat-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feat-unit {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.feat-score-track {
+  flex: 1;
+  height: 5px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.feat-score-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 300ms ease;
+}
+
+.feat-score-val {
+  flex-shrink: 0;
+  width: 30px;
+  text-align: right;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: ui-monospace, "SF Mono", monospace;
+}
+
+/* ─── Weather feature expand button ─────────────────────────────────────── */
+.feat-expand-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 3px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: color var(--transition), background var(--transition);
+}
+
+.feat-expand-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.06); }
+
+.feat-chevron {
+  width: 14px;
+  height: 14px;
+  transition: transform var(--transition);
+}
+
+.feat-weather.expanded .feat-chevron { transform: rotate(180deg); }
+
+/* ─── Chart drawer ───────────────────────────────────────────────────────── */
+.feat-drawer { margin-top: 10px; }
+
+.feat-chart-wrap {
+  position: relative;
+  height: 155px;
+}
+
+.feat-chart-legend {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 10px;
+  color: rgba(34,197,94,0.7);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ─── Scenario list page ─────────────────────────────────────────────────── */
+.page-container {
+  padding: 1.5rem 2rem;
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.page-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.btn { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.5rem 1rem;
+       border-radius: 6px; font-size: 0.875rem; font-weight: 500; cursor: pointer;
+       text-decoration: none; border: none; }
+.btn-primary { background: #22c55e; color: #fff; }
+.btn-primary:hover { background: #16a34a; }
+
+.table-card {
+  background: #1e293b;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid #334155;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.data-table th {
+  padding: 0.625rem 1rem;
+  text-align: left;
+  font-weight: 500;
+  color: #94a3b8;
+  background: #0f172a;
+  border-bottom: 1px solid #334155;
+}
+
+.data-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #1e293b;
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+.table-empty { text-align: center; color: #64748b; padding: 2rem; }
+
+.link-primary { color: #22c55e; text-decoration: none; }
+.link-primary:hover { text-decoration: underline; }
+
+.text-muted { color: #64748b; }
+
+.badge { display: inline-block; padding: 0.2em 0.6em; border-radius: 4px;
+         font-size: 0.75rem; font-weight: 500; }
+.badge-success  { background: rgba(34,197,94,0.15);  color: #22c55e; }
+.badge-warning  { background: rgba(234,179,8,0.15);  color: #eab308; }
+.badge-danger   { background: rgba(239,68,68,0.15);  color: #ef4444; }
+.badge-neutral  { background: rgba(100,116,139,0.15); color: #94a3b8; }
+
+.progress-track { background: #334155; border-radius: 4px; height: 6px; width: 120px; overflow: hidden; }
+.progress-fill  { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
+.progress-fill-success { background: #22c55e; }
+.progress-fill-running { background: #eab308; animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+.actions-cell { display: flex; gap: 0.5rem; }
+
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 5px; border: none; cursor: pointer;
+  background: transparent; color: #64748b; text-decoration: none;
+}
+.icon-btn:hover { background: #334155; color: #e2e8f0; }
+.icon-btn-danger:hover { background: rgba(239,68,68,0.15); color: #ef4444; }
+
+/* ─── Scenario result page ───────────────────────────────────────────────── */
+#scenario-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+}
+
+#scenario-map {
+  flex: 1;
+  height: 100%;
+}
+
+/* ─── Before/After score pair ────────────────────────────────────────────── */
+.scen-score-pair {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  min-width: 90px;
+}
+
+.scen-before { color: #64748b; }
+.scen-arrow  { color: #475569; }
+.scen-after  { font-weight: 600; }
+
+
+/* ─── Scenario result: override chips ───────────────────────────────────── */
+.scen-overrides-bar {
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  background: rgba(15,23,42,0.6);
+  border-bottom: 1px solid #334155;
+}
+
+.scen-override-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.625rem;
+  border-radius: 99px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(56,189,248,0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56,189,248,0.25);
+  white-space: nowrap;
+}
+
+/* ─── Scenario result: parameter requirement rows ───────────────────────── */
+/* Mirror .suit-crop-label but for non-interactive requirement items */
+.scen-req-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.scen-req-diff {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.scen-req-expand {
+  background: transparent;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 0.625rem;
+  padding: 0.15rem 0.5rem;
+  flex-shrink: 0;
+  transition: border-color 0.15s, color 0.15s;
+}
+.scen-req-expand:hover { border-color: #94a3b8; color: #e2e8f0; }
+
+.scen-req-chart-wrap {
+  padding: 0.5rem 0 0.25rem;
+  height: 220px;
+}

@@ -45,25 +45,27 @@
         </li>
 
         <li>
-          <a href="#" class="nav-item disabled" aria-disabled="true">
+          <a href="{{ url_for('views.suitability_view') }}"
+             class="nav-item {% if request.endpoint == 'views.suitability_view' %}active{% endif %}"
+             aria-current="{% if request.endpoint == 'views.suitability_view' %}page{% endif %}">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 2L2 7l10 5 10-5-10-5z"/>
               <path d="M2 17l10 5 10-5"/>
               <path d="M2 12l10 5 10-5"/>
             </svg>
             <span class="nav-label">Suitability</span>
-            <span class="nav-badge">Soon</span>
           </a>
         </li>
         <li>
-          <a href="#" class="nav-item disabled" aria-disabled="true">
+          <a href="{{ url_for('views.scenario_list_view') }}"
+             class="nav-item {% if request.endpoint and request.endpoint.startswith('views.scenario') %}active{% endif %}"
+             aria-current="{% if request.endpoint and request.endpoint.startswith('views.scenario') %}page{% endif %}">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <line x1="18" y1="20" x2="18" y2="10"/>
               <line x1="12" y1="20" x2="12" y2="4"/>
               <line x1="6" y1="20" x2="6" y2="14"/>
             </svg>
             <span class="nav-label">Scenarios</span>
-            <span class="nav-badge">Soon</span>
           </a>
         </li>
       </ul>
@@ -71,7 +73,7 @@
     </div>
 
     <div class="nav-footer">
-      <span class="nav-version">Phase 2</span>
+      <span class="nav-version">Phase 4</span>
     </div>
   </nav>
 

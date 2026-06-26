@@ -8,17 +8,21 @@ Browser
   │  HTTP
   ▼
 Flask (agritwin-app)  ─── port 5001 (Docker) / 5000 (host)
-  ├── GET /                → views/map.py → Jinja2 map.html
-  └── GET /api/*           → api/cells.py, api/features.py → JSON / GeoJSON
+  ├── GET /                → views/map.py → Jinja2 map.html         (monitoring)
+  ├── GET /suitability     → views/suitability.py → suitability.html (Phase 3)
+  ├── GET /api/cells/*     → api/cells.py     → JSON / GeoJSON
+  ├── GET /api/features    → api/features.py  → JSON
+  └── GET /api/suitability/* → api/suitability.py → JSON / GeoJSON  (Phase 3)
             │
             │  SQLAlchemy + GeoAlchemy2
             ▼
 PostgreSQL + PostGIS + TimescaleDB  ─── port 5433
   ├── ETL tables (agritwin-etl owns, migrations): spatial_cell, observation, feature, crop, …
-  └── App tables (agritwin-app owns, migrations): scenario, suitability_score, …  [Phase 3+]
+  └── App tables (agritwin-app owns, migrations): suitability_score (baseline loaded by ETL),
+                                                   scenario, scenario_override, …  [Phase 4+]
 ```
 
-No external services are called at query time. All data is pre-loaded into PostgreSQL by `agritwin-etl db-load`. Phase 2 reads only.
+No external services are called at query time. All data is pre-loaded into PostgreSQL by `agritwin-etl db-load` / `load.sh`.
 
 ## Docker service architecture
 
@@ -72,27 +76,23 @@ This means both repos must be siblings under the same parent directory for `dock
 
 MapLibre GL JS runs in the browser. Flask serves the HTML shell page and the data API — it does not generate map tiles. MapLibre loads from a CDN link in `base.html`.
 
-### Phase 2: bbox-GeoJSON source
+### Zoom-adaptive multi-resolution rendering
 
-`map.js` initializes a MapLibre `geojson` source pointed at `/api/cells`:
+The map operates in five modes determined by MapLibre zoom level:
 
-```javascript
-map.addSource('cells', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+| zoom | mode | resolution | API call | typical cells in viewport |
+|---|---|---|---|---|
+| < 5 | cluster | — | `/api/cells/centroids` (once, cached) | MapLibre client-side clusters |
+| 5–6 | res-6 | 6 | `/api/cells?resolution=6` | ~1,000 large hexagons |
+| 7–8 | res-7 | 7 | `/api/cells?resolution=7` | ~500–2,000 hexagons |
+| 9–10 | res-8 | 8 | `/api/cells?resolution=8` | ~2,000–8,000 hexagons |
+| ≥ 11 | res-9 | 9 | `/api/cells?resolution=9` | ~2,000–8,000 hexagons |
 
-map.on('moveend', fetchCells);
+`map.js` listens to `zoomend` (to switch resolution mode) and `moveend` (to reload cells for new viewport). A `_zoomFetched` flag prevents the `moveend` that MapLibre always fires immediately after `zoomend` from issuing a duplicate request.
 
-function fetchCells() {
-  const b = map.getBounds();
-  const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
-  fetch(`/api/cells?bbox=${bbox}&feature=${selectedFeature}`)
-    .then(r => r.json())
-    .then(geojson => map.getSource('cells').setData(geojson));
-}
-```
+The polygon layers (`cells-fill`, `cells-outline`, `cells-hover`) share a single GeoJSON source that is replaced on each fetch. The cluster layer uses a separate source loaded from `/api/cells/centroids` once on startup.
 
-The layer is a `fill` layer with `fill-color` driven by the `value` property using a stepped or interpolated color expression. A second `line` layer draws cell boundaries.
-
-**Why bbox-GeoJSON, not vector tiles:** simplest to implement and debug; 2,000–8,000 cells per viewport is fast enough for local single-user dev. If rendering performance degrades at tight zoom (many cells) or with slow initial loads, the upgrade path is to pre-generate a PMTiles file with `tippecanoe` and serve it via Flask's `send_from_directory`. That upgrade is self-contained and doesn't change the API contract or data model.
+**Why bbox-GeoJSON, not vector tiles:** simplest to implement and debug; payload is manageable at each zoom level. If rendering performance degrades, the upgrade path is PMTiles via `tippecanoe` — self-contained, no API contract change.
 
 ## Key database queries
 
@@ -119,12 +119,14 @@ LEFT JOIN LATERAL (
 ) lat ON true
 LEFT JOIN feature f ON f.name = :feature_name
 WHERE sc.geometry && ST_MakeEnvelope(:west, :south, :east, :north, 4326)
-  AND sc.resolution = 9;   -- exclude ERA5-Land res-6 parent cells
+  AND sc.resolution = :resolution;  -- 6 / 7 / 8 / 9 driven by map zoom level
 ```
 
 When `feature_name` is not supplied, omit the `LATERAL` and `feature` joins.
 
-**Terrain features exception:** `elevation`, `slope`, and `aspect` are stored directly in `spatial_cell`, not in `observation`. When `feature_name` is one of these, the query reads `sc.elevation` / `sc.slope` / `sc.aspect` directly and skips the `LATERAL` subquery entirely. This is handled via a `TERRAIN_FEATURES` dict in `api/cells.py`.
+**Weather features exception:** ERA5 weather is stored at res-6. For res-7/8/9 cells, `api/cells.py` first fetches the viewport cells, then maps each `h3_id` to its res-6 parent via `h3.cell_to_parent(h3_id, 6)` and joins the observation table using those parent IDs. This avoids duplicating ERA5 data at every resolution.
+
+**Terrain features exception:** `elevation`, `slope`, and `aspect` are stored directly in `spatial_cell`, not in `observation`. When `feature_name` is one of these, the query reads `sc.elevation` / `sc.slope` / `sc.aspect` directly and skips the `LATERAL` subquery entirely. These columns are populated for res-7/8/9 (averaged from res-9 SRTM data) and are null at res-6 (ERA5 cells have no terrain data).
 
 ### Full environmental profile for one cell
 
@@ -182,13 +184,13 @@ context.configure(
 
 Never run `agritwin-etl`'s Alembic from this repo and vice versa.
 
-## Phase 3+ additions (not built yet)
+## Phase additions
 
-| Phase | Addition | New tables |
-|---|---|---|
-| 3 | Crop suitability scoring (background task, reads observation + crop_requirement) | `suitability_score` |
-| 4 | Scenario simulation (user overrides + re-score) | `scenario`, `scenario_override` |
-| 5 | Yield prediction (statistical model from QCL historical data + scores) | `yield_prediction` |
-| 6 | Economic simulation (yield × price − costs) | `profit_projection` |
+| Phase | Addition | New tables | Status |
+|---|---|---|---|
+| 3 | Crop suitability scoring — ETL computes scores, app reads; dedicated `/suitability` page with choropleth map, crop radio selector, monthly climate chart | `suitability_score` | **COMPLETE ✅** |
+| 4 | Scenario simulation (user overrides + re-score) | `scenario`, `scenario_override` | not started |
+| 5 | Yield prediction (statistical model from QCL historical data + scores) | `yield_prediction` | not started |
+| 6 | Economic simulation (yield × price − costs) | `profit_projection` | not started |
 
-None of these require ETL schema changes or `agritwin-etl` migrations.
+Phases 4–6 require no ETL schema changes or `agritwin-etl` migrations.

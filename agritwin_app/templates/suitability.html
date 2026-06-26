@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Suitability — AgriTwin{% endblock %}
+
+{% block content %}
+<div id="suitability-container">
+  <div id="suitability-map"></div>
+
+  <aside id="suit-panel" class="suit-panel hidden" aria-label="Cell suitability">
+
+    <div id="suit-resize-handle" class="panel-resize-handle"></div>
+
+    <div class="panel-sticky-top">
+      <div class="panel-header">
+        <div class="panel-title-group">
+          <h2 class="panel-title">Cell Suitability</h2>
+          <code id="suit-cell-id" class="panel-h3id">—</code>
+        </div>
+        <button id="suit-panel-close" class="panel-close" aria-label="Close panel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="panel-body">
+      <div id="suit-crops-section"></div>
+      <div id="suit-features-section"></div>
+    </div>
+
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/suitability_map.js') }}"></script>
+<script src="{{ url_for('static', filename='js/suitability_panel.js') }}"></script>
+{% endblock %}

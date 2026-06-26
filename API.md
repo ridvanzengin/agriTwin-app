@@ -1,4 +1,4 @@
-# API Reference — Phase 2
+# API Reference — Phase 2 + Phase 3
 
 All `/api/*` endpoints return JSON or GeoJSON. No authentication. No pagination in Phase 2 (bbox limits response size for cells; timeseries and feature list are naturally bounded).
 
@@ -43,19 +43,31 @@ Returns all available feature names, categories, and units. Used by the frontend
 
 ## GET /api/cells
 
-Returns a GeoJSON FeatureCollection of H3 cells whose geometry intersects the given bounding box. Called by `map.js` on every `moveend` event.
+Returns a GeoJSON FeatureCollection of H3 cells whose geometry intersects the given bounding box. Called by `map.js` on every `moveend` and on zoom-level changes.
 
 ### Query parameters
 
 | param | required | type | description |
 |---|---|---|---|
 | `bbox` | yes | string | `west,south,east,north` in WGS84 decimal degrees |
+| `resolution` | no | int | H3 resolution: 6, 7, 8, or 9 (default: 9) |
 | `feature` | no | string | feature name — adds `value` and `value_unit` properties to each cell |
+
+### Resolution and feature availability
+
+| resolution | cells | weather features | soil/NDVI/ET features | terrain (elevation/slope/aspect) |
+|---|---|---|---|---|
+| 6 | 1,115 | ✓ direct (ERA5 stored at res-6) | ✓ aggregated from res-9 | null (ERA5 cells have no SRTM data) |
+| 7 | 7,343 | ✓ via res-6 parent lookup | ✓ aggregated from res-9 | ✓ mean of res-9 children |
+| 8 | 50,056 | ✓ via res-6 parent lookup | ✓ aggregated from res-9 | ✓ mean of res-9 children |
+| 9 | 346,787 | ✓ via res-6 parent lookup | ✓ raw observations | ✓ from SRTM |
+
+Weather features (category `weather`) are stored at res-6. For res-7/8/9 cells, the API maps each cell to its res-6 ancestor via `h3.cell_to_parent` and joins from there — no data duplication, just a query-time lookup.
 
 ### Example
 
 ```
-GET /api/cells?bbox=31.8,37.2,34.2,39.4&feature=ndvi
+GET /api/cells?bbox=31.8,37.2,34.2,39.4&feature=ndvi&resolution=7
 ```
 
 ### Response — GeoJSON FeatureCollection
@@ -92,7 +104,31 @@ When `feature` is not supplied, `value` and `value_unit` are absent from `proper
 | status | condition |
 |---|---|
 | 400 | `bbox` missing or not parseable as four floats |
+| 400 | `resolution` not in (6, 7, 8, 9) |
 | 400 | Bounding box covers more than the full extent of Konya Province (sanity limit) |
+
+---
+
+## GET /api/cells/centroids
+
+Returns all res-6 cell centroids as a Point GeoJSON FeatureCollection. Loaded once on startup by `map.js` and used as the source for MapLibre's client-side clustering at low zoom levels.
+
+### Response
+
+```json
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [32.41, 37.88] },
+      "properties": { "h3_id": "862d16267ffffff" }
+    }
+  ]
+}
+```
+
+No query parameters. Always returns all 1,115 res-6 centroids.
 
 ---
 
@@ -207,6 +243,136 @@ GET /api/cells/891f1d48003ffff/timeseries?feature=ndvi&start=2022-01-01
 
 | route | description |
 |---|---|
-| `GET /` | Map page — renders `map.html` with MapLibre centered on Konya Province |
+| `GET /` | Monitoring map — renders `map.html` with MapLibre centered on Konya Province |
+| `GET /suitability` | Suitability page — renders `suitability.html` with choropleth map and crop scoring panel |
 
-No other HTML routes in Phase 2.
+---
+
+## GET /api/suitability/cells
+
+Returns a GeoJSON FeatureCollection of res-9 H3 cells in the viewport, colored by suitability score for the given crop. Called by `suitability_map.js` on every `moveend`.
+
+### Query parameters
+
+| param | required | type | description |
+|---|---|---|---|
+| `bbox` | yes | string | `west,south,east,north` in WGS84 decimal degrees |
+| `crop` | yes | string | crop name (e.g. `wheat`, `barley`, `cotton`) |
+
+### Response — GeoJSON FeatureCollection
+
+```json
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[32.41, 37.88], [32.42, 37.88], [32.42, 37.89], [32.41, 37.88]]]
+      },
+      "properties": {
+        "h3_id": "891f1d48003ffff",
+        "score": 0.72
+      }
+    }
+  ]
+}
+```
+
+Cells with no score row (scenario_id IS NULL) are omitted. Score is null-safe — cells missing from `suitability_score` do not appear in the response.
+
+### Error responses
+
+| status | condition |
+|---|---|
+| 400 | `bbox` missing or not parseable as four floats |
+| 400 | `crop` missing or not found in `crop` table |
+
+---
+
+## GET /api/suitability/cells/\<h3_id\>
+
+Returns the baseline suitability score for all 8 crops for a single cell. Used by Tab 1 of the suitability sidebar.
+
+### Example
+
+```
+GET /api/suitability/cells/891f1d48003ffff
+```
+
+### Response
+
+```json
+[
+  { "crop_name": "wheat",      "score": 0.82, "scored_at": "2026-06-23T00:00:00+00:00" },
+  { "crop_name": "barley",     "score": 0.79, "scored_at": "2026-06-23T00:00:00+00:00" },
+  { "crop_name": "chickpea",   "score": 0.61, "scored_at": "2026-06-23T00:00:00+00:00" },
+  { "crop_name": "lentil",     "score": 0.68, "scored_at": "2026-06-23T00:00:00+00:00" },
+  { "crop_name": "sunflower",  "score": 0.44, "scored_at": "2026-06-23T00:00:00+00:00" },
+  { "crop_name": "sugar_beet", "score": 0.38, "scored_at": "2026-06-23T00:00:00+00:00" },
+  { "crop_name": "maize",      "score": 0.35, "scored_at": "2026-06-23T00:00:00+00:00" },
+  { "crop_name": "cotton",     "score": 0.19, "scored_at": "2026-06-23T00:00:00+00:00" }
+]
+```
+
+Sorted descending by score. Only baseline rows (`scenario_id IS NULL`) are returned.
+
+### Error responses
+
+| status | condition |
+|---|---|
+| 404 | `h3_id` not found in `spatial_cell` |
+
+---
+
+## GET /api/suitability/cells/\<h3_id\>/monthly
+
+Returns the monthly actual climate values alongside the crop's monthly requirements for all scored weather features. Used by Tab 2 (monthly chart) of the suitability sidebar.
+
+### Query parameters
+
+| param | required | type | description |
+|---|---|---|---|
+| `crop` | yes | string | crop name |
+
+### Example
+
+```
+GET /api/suitability/cells/891f1d48003ffff/monthly?crop=wheat
+```
+
+### Response
+
+```json
+{
+  "h3_id": "891f1d48003ffff",
+  "crop": "wheat",
+  "features": [
+    {
+      "feature": "temperature_2m",
+      "unit": "°C",
+      "months": [
+        { "month": 10, "actual": 13.2, "req_min": 5,  "req_optimal": 12, "req_max": 22 },
+        { "month": 11, "actual": 7.1,  "req_min": -2, "req_optimal": 6,  "req_max": 15 },
+        { "month": 5,  "actual": 17.8, "req_min": 12, "req_optimal": 18, "req_max": 28 }
+      ]
+    },
+    {
+      "feature": "precipitation",
+      "unit": "mm",
+      "months": [...]
+    }
+  ]
+}
+```
+
+`actual` is the mean across years 2018–2023 for that (h3_id → res-6 parent, month) pair. ERA5 weather is fetched from the res-6 parent cell. Only months where a `crop_requirement` row exists are included. Features with no requirements for the crop are omitted.
+
+### Error responses
+
+| status | condition |
+|---|---|
+| 400 | `crop` param missing |
+| 404 | `h3_id` not found in `spatial_cell` |
+| 404 | `crop` not found in `crop` table |

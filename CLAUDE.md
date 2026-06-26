@@ -4,9 +4,9 @@ This file is the working agreement for Claude Code in this repository. Read it b
 
 ## What this repo is
 
-AgriTwin's web application. A Flask + MapLibre tool that reads from the PostgreSQL data lake built by `agritwin-etl` and lets users browse H3 resolution-9 cells across Konya Province, inspect their environmental profiles (elevation, soil, weather history, NDVI), and — in later phases — run crop suitability scoring and scenario simulation.
+AgriTwin's web application. A Flask + MapLibre tool that reads from the PostgreSQL data lake built by `agritwin-etl` and lets users browse H3 resolution-9 cells across Konya Province, inspect their environmental profiles (elevation, soil, weather history, NDVI), and view per-cell crop suitability scores on a dedicated suitability page.
 
-**Phase 2 goal (first sprint):** display all H3 cells on a map; click any cell to see its full environmental profile.
+**Current phase:** Phase 4 complete — map + cell inspection (Phase 2), crop suitability page (Phase 3), and scenario simulation (Phase 4) are all shipped. Phase 5 (yield prediction) is next.
 
 ## What this repo is NOT
 
@@ -52,17 +52,20 @@ Both repos share the same PostgreSQL database. `agritwin-etl` occupies the defau
 ```
 agritwin-app/
   pyproject.toml
-  docker-compose.yml           # Four services: db, migrate, web, loader — run from this directory
+  docker-compose.yml           # Six services: db, redis, migrate, web, celery_worker, loader — run from this directory
   Dockerfile                   # Build context is .. (monorepo root); bakes in ETL source, mounts data/ at runtime
   migrate.sh                   # Runs both Alembic chains (ETL + app), then exits
-  load.sh                      # Bulk-loads all Parquet tables in FK-safe order, then exits
+  load.sh                      # Bulk-loads all Parquet tables in FK-safe order, seeds demo scenarios, then exits
+  seed_runner.py               # Standalone script called by load.sh to seed 4 demo scenarios after ETL data is ready
   .env.example
   alembic/
     env.py                     # version_table = "alembic_version_app"
-    versions/                  # app-owned table migrations (0001_create_app_tables.py created in Phase 3)
+    versions/                  # 0001_create_app_tables.py, 0002_extend_scenario_for_phase4.py
   agritwin_app/
     __init__.py                # Flask app factory: create_app()
     config.py                  # Pydantic BaseSettings, reads .env
+    tasks.py                   # Celery app + compute_scenario_scores task
+    seed.py                    # seed_demo_scenarios() — idempotent, called by seed_runner.py
     db/
       session.py               # SQLAlchemy engine + SessionLocal
       models.py                # All models: ETL tables (read-only) + app-owned tables
@@ -70,22 +73,36 @@ agritwin-app/
       __init__.py              # api Blueprint registration
       cells.py                 # GET /api/cells, /api/cells/<h3_id>, /api/cells/<h3_id>/timeseries
       features.py              # GET /api/features
+      suitability.py           # GET /api/suitability/cells, /cells/<h3_id>, /cells/<h3_id>/monthly
+      scenario.py              # POST/GET/DELETE /api/scenarios, /api/scenarios/<id>/cells, /status, /requirements
     views/
       __init__.py              # views Blueprint registration
       map.py                   # GET / → renders map.html
+      suitability.py           # GET /suitability → renders suitability.html
+      scenario.py              # GET /scenarios, /scenarios/new, /scenarios/<id>
     templates/
-      base.html                # HTML boilerplate, MapLibre CDN links
-      map.html                 # map container + sidebar panel
+      base.html                # HTML boilerplate, MapLibre CDN links, navbar
+      map.html                 # monitoring map container + sidebar panel
+      suitability.html         # suitability map + two-tab sidebar (crop scores + monthly chart)
+      scenario_list.html       # table of saved scenarios with status badges + polling
+      scenario_new.html        # split layout: map draw (60%) + form (40%)
+      scenario_result.html     # split map: baseline left / scenario right; panel with baseline vs scenario scores
     static/
       js/
-        map.js                 # MapLibre init, bbox fetch on moveend, layer setup
-        panel.js               # cell click → sidebar populate + charts
+        map.js                 # MapLibre init, 5-level zoom ladder, bbox fetch, panel
+        panel.js               # monitoring cell click → sidebar populate + charts
+        suitability_map.js     # MapLibre choropleth at res-9; score color ramp; bbox fetch on moveend
+        suitability_panel.js   # Tab 1: 8-crop radio + progress bars; Tab 2: Chart.js band chart
+        scenario_new.js        # MapLibre + MapboxGL Draw; polygon validation; POST to /api/scenarios
+        scenario_result.js     # dual-map sync; baseline vs scenario score panel; monthly requirement chart
       css/
         app.css
   tests/
     conftest.py                # Flask test client, DB session fixture
     test_api_cells.py
     test_api_features.py
+    test_api_suitability.py    # covers all three suitability API endpoints
+    test_api_scenario.py       # covers scenario CRUD + status + cell endpoints
 ```
 
 ## Local development setup
@@ -103,14 +120,16 @@ cp .env.example .env             # set FLASK_SECRET_KEY (any string for local de
 docker compose up --build -d
 ```
 
-This starts four services in dependency order:
+This starts six services in dependency order:
 
 | Service | What it does | Exits? |
 |---|---|---|
 | `db` | PostgreSQL + PostGIS + TimescaleDB on port 5433 | stays up |
+| `redis` | Redis 7 on port 6379 — Celery broker + result backend | stays up |
 | `migrate` | Applies both Alembic chains (ETL's + this app's), then exits | yes |
 | `web` | Flask app on port 5001 (starts after `migrate`) | stays up |
-| `loader` | Bulk-loads all Parquet data (~5–10 min via COPY FROM STDIN), then exits | yes |
+| `celery_worker` | Celery worker — processes scenario scoring tasks asynchronously | stays up |
+| `loader` | Bulk-loads all Parquet data (~5–10 min via COPY FROM STDIN), seeds demo scenarios, then exits | yes |
 
 Flask is available at **http://localhost:5001** while the loader runs — the map appears immediately and data fills in as tables load.
 
@@ -213,28 +232,140 @@ All 19 pytest tests pass. Verified end-to-end against the fully-loaded DB.
 - [x] NaN floats serialized as JSON `null` (prevents SyntaxError on res-6 cells)
 - [x] DB session pool exhaustion fixed — `get_session()` uses `@contextmanager`; all callers use `with get_session()`
 
-## Phase 3 definition of done — IN PROGRESS 🚧
+## Phase 3 definition of done — COMPLETE ✅ (2026-06-25)
 
-**Goal:** Suitability scoring — compute per-cell, per-crop scores from `crop_requirement` data; display on map.
+**Goal:** Suitability scoring — display per-cell, per-crop scores on a dedicated suitability page.
+
+**Architecture:**
+- Scores are **computed in `agritwin-etl`** (not here): `agritwin-etl score` writes `suitability_score.parquet`; the loader loads it into `suitability_score`. This app is **read-only** for scores.
+- Suitability lives on its **own page** (`GET /suitability`) with its own map, its own sidebar, and its own JS files (`suitability_map.js`, `suitability_panel.js`). Zero changes to `map.js`/`panel.js`.
+- Scoring uses **monthly averages**, not latest-value snapshots: each month's ERA5 cell mean vs. that month's crop requirement. Soil/terrain use a single year-round comparison.
+- Suitability map is **res-9 only** — field-level analysis tool; no multi-resolution zoom ladder.
+
+**Note on `actual` values in Tab 2:** The `/api/suitability/cells/<h3_id>/monthly` endpoint fetches actual climate values live from the `observation` table. Soil features show "—" until SoilGrids observations finish loading in `load.sh` Stage 5.
+
+### Suitability page UI specification
+
+#### Overall layout
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  navbar: [AgriTwin logo]  [Monitoring]  [Suitability ←here] │
+├─────────────────────────────────────────────────────────────┤
+│                                          │                   │
+│   MapLibre map (res-9 cells,             │  Right sidebar    │
+│   colored by suitability score)          │  (hidden until    │
+│                                          │   cell click)     │
+│                                          │                   │
+└─────────────────────────────────────────┴───────────────────┘
+```
+
+#### Map
+
+- Opens at zoom ~12 (res-9 visible immediately — no zoom ladder, no clustering).
+- Center: Konya Province (same as monitoring map).
+- Cells colored by suitability score for the **currently selected crop** (radio in sidebar Tab 1).
+- Color ramp: **0.0 = red → 0.5 = yellow → 1.0 = green** (traffic-light scale, standard agronomic convention).
+- Default crop on load: **Wheat** (most common in Konya; scores are pre-computed so no delay).
+- Clicking a cell opens the right sidebar and highlights that cell.
+- On `moveend`, fetches `GET /api/suitability/cells?bbox=...&crop=<selected_crop>` to color the viewport.
+
+#### Right sidebar
+
+Hidden on page load; appears when a cell is clicked. Same resize handle as the monitoring panel (`localStorage` persists width). Two tabs:
+
+---
+
+**Tab 1 — Crop Scores** (default active tab)
+
+Shows the suitability score for all 8 crops for the clicked cell.
+
+Layout per crop row:
+```
+○ Wheat        ████████████████░░░░  0.82
+○ Barley       █████████████░░░░░░░  0.68
+○ Sugar Beet   ██████░░░░░░░░░░░░░░  0.34
+...
+```
+
+- 8 rows, one per crop (Wheat, Barley, Sugar Beet, Sunflower, Maize, Chickpea, Lentil, Cotton).
+- Each row: radio button + crop name + CSS progress bar + numeric score (2 decimal places).
+- **Radio button is the crop selector** — clicking it changes the map coloring to that crop's scores.
+  No separate dropdown needed; the radio serves both purposes.
+- Default selected: Wheat.
+- Progress bar is pure CSS (`width: calc(score * 100%)`); no Chart.js needed for this tab.
+- Scores fetched from `GET /api/suitability/cells/<h3_id>` on cell click.
+
+---
+
+**Tab 2 — Monthly Detail**
+
+Shows how the cell's actual monthly climate compares to the selected crop's requirements for one weather feature at a time.
+
+- **Feature selector**: a `<select>` dropdown above the chart with the weather features that have monthly requirements for the current crop:
+  `Temperature (°C)` | `Precipitation (mm)` | `Solar Radiation (MJ/m²)` | `Min Temperature (°C)`
+  (Only show features that exist in crop_requirement for this crop.)
+- **Chart (Chart.js)**: x-axis = months Jan–Dec; two datasets:
+  1. **Shaded range band**: ideal min → ideal max for each month (only growing-season months have data; off-season months show no band). Rendered as a semi-transparent green fill between two lines.
+  2. **Actual line**: actual monthly mean value for this cell (averaged across ERA5 2018–2023). Dots on each month. Line color: green where inside the ideal range, red where outside.
+- Below the chart: a one-line summary, e.g. *"7 of 9 growing-season months within ideal range."*
+- Data fetched from `GET /api/suitability/cells/<h3_id>/monthly?crop=<selected_crop>`.
+  Response shape: `{ feature: "temperature_2m", months: [ { month: 1, actual: 0.8, req_min: -10, req_optimal: 0, req_max: 7 }, ... ] }`
+  Only months with a requirement row are included; the chart leaves gaps for non-growing months.
+
+---
 
 - [x] Alembic migration creates app-owned tables: `suitability_score`, `scenario`, `scenario_override`, `yield_prediction`, `profit_projection` (`alembic/versions/0001_create_app_tables.py`)
-- [ ] `agritwin_app/scoring/engine.py` — pure scoring function: reads cell features + crop requirements, returns score 0–1
-- [ ] `flask score run [--crop NAME]` CLI command — bulk-scores all res-9 cells, writes to `suitability_score`; idempotent (upsert)
-- [ ] `POST /api/score/run` — triggers scoring in a background thread; returns `{"status": "started"}`
-- [ ] `GET /api/score/status` — returns `{"status": "running|idle|error", "scored_at": ...}`
-- [ ] `GET /api/cells?bbox=...&mode=score&crop=wheat` — cells colored by suitability score (0–1) for the given crop
-- [ ] `GET /api/cells/<h3_id>/scores` — returns `[{crop, score, scored_at}]` for all crops for the cell
-- [ ] Map: "Suitability" mode toggle + crop dropdown; map colors shift to score palette (0=red → 1=green)
-- [ ] Cell panel: "Suitability" tab listing all crop scores as a bar chart
-- [ ] pytest covers all new API endpoints (target: ~25 total tests)
+- [x] `GET /suitability` route + `suitability.html` template — own navbar item, MapLibre container, right sidebar (2 tabs)
+- [x] `agritwin_app/views/suitability.py` — renders suitability page
+- [x] `agritwin_app/api/suitability.py` — three endpoints:
+  - `GET /api/suitability/cells?bbox=w,s,e,n&crop=<name>` — GeoJSON FeatureCollection with `score` (0–1) property
+  - `GET /api/suitability/cells/<h3_id>` — returns `[{crop_name, score, scored_at}]` for all 8 crops
+  - `GET /api/suitability/cells/<h3_id>/monthly?crop=<name>` — monthly actual means + requirements for all weather features (feeds Tab 2)
+- [x] `suitability_map.js` — MapLibre init at res-9 zoom; score color ramp (0=red → 1=green); bbox fetch on moveend; no zoom ladder
+- [x] `suitability_panel.js` — Tab 1: 8 crops with radio buttons + CSS progress bars (score as 0–100%); clicking radio recolors map. Tab 2: Chart.js band chart (shaded ideal range + actual monthly mean line) with feature selector
+- [x] `base.html` — "Suitability" navbar link added
+- [x] `load.sh` — Stage 4 added for suitability baseline scores
+- [x] pytest covers all three suitability API endpoints
+
+## Phase 4 definition of done — COMPLETE ✅ (2026-06-26)
+
+**Goal:** Scenario simulation — let the user draw a polygon, apply environmental overrides (precipitation, temperature, soil pH), re-score cells asynchronously, and compare against the baseline.
+
+**Architecture:**
+- Scenario scoring runs in a **Celery worker** (`tasks.py`), not in a Flask request. The web service dispatches the task; the worker writes results to `suitability_score` with a non-null `scenario_id`.
+- **Redis** (new service) is the Celery broker and result backend.
+- Scores are stored identically to baseline scores — the only difference is `scenario_id IS NOT NULL`. The scenario result page reads these the same way the suitability page reads baseline scores.
+- **Demo scenarios** are seeded by `seed_runner.py`, called at the end of `load.sh` (Stage 6) — after all ETL data is loaded — so the Celery worker can score them with complete data.
+
+**New tables:** `suitability_score.scenario_id` (column added in Phase 3 migration 0001), `scenario.polygon_geom` + `scenario.overrides` + `scenario.task_id` + `scenario.status` + `scenario.scored_at` (added in migration 0002)
+
+- [x] Alembic migration `0002_extend_scenario_for_phase4.py` — adds `polygon_geom`, `overrides`, `task_id`, `status`, `scored_at` to `scenario`
+- [x] `docker-compose.yml` — added `redis` service (broker) and `celery_worker` service (runs `compute_scenario_scores`)
+- [x] `agritwin_app/tasks.py` — `compute_scenario_scores` Celery task: loads polygon cells, applies override deltas, calls ETL scoring engine, bulk-inserts `suitability_score` rows, marks scenario `completed` or `failed`
+- [x] `agritwin_app/seed.py` + `seed_runner.py` — idempotent seeding of 4 demo scenarios (by name); dispatches Celery tasks; called from `load.sh` Stage 6
+- [x] `agritwin_app/api/scenario.py` — 7 endpoints:
+  - `POST /api/scenarios` — create scenario (name, WKT polygon, overrides dict); validates polygon; dispatches Celery task
+  - `GET /api/scenarios` — list all scenarios ordered by `created_at DESC`
+  - `GET /api/scenarios/<id>/status` — poll task status + `scored_at`
+  - `DELETE /api/scenarios/<id>` — delete scenario + cascaded scores
+  - `GET /api/scenarios/<id>/cells?bbox=...&crop=...` — GeoJSON FeatureCollection of scenario scores
+  - `GET /api/scenarios/<id>/cells/<h3_id>` — baseline vs. scenario score for all 8 crops for one cell
+  - `GET /api/scenarios/<id>/cells/<h3_id>/requirements?crop=...` — monthly baseline + scenario values vs. crop requirements (feeds the override chart)
+- [x] `agritwin_app/views/scenario.py` — three view routes: `/scenarios`, `/scenarios/new`, `/scenarios/<id>`
+- [x] `scenario_list.html` — table of scenarios with status badge, progress bar, live polling every 3 s for pending/running rows
+- [x] `scenario_new.html` + `scenario_new.js` — split layout (60/40): MapLibre map with MapboxGL Draw polygon tool (left) + scenario name + override delta fields + submit (right); polygon validated against MAX_CELLS limit before submit
+- [x] `scenario_result.html` + `scenario_result.js` — dual-map layout (baseline left, scenario right) synced on pan/zoom; right sidebar: crop score comparison (baseline vs. scenario score per crop) + monthly requirement chart (baseline line, scenario line, ideal band) for each active override
+- [x] `tests/test_api_scenario.py` — covers scenario CRUD, status polling, cell GeoJSON, and per-cell score endpoints
 
 ## Things to avoid
 
 - Don't add ingest logic, Parquet writing, or `agritwin-etl` CLI commands here.
 - Don't run Alembic against ETL-owned tables.
-- Don't add scenario simulation or yield/profit prediction until suitability scoring is complete and tested.
+- Don't add yield prediction or profit projection until scenario simulation is stable.
 - Don't use React, Vue, or any JS framework — vanilla JS only.
 - Don't use npm or a JS build step — MapLibre loaded from CDN.
 - Don't add user authentication until it's explicitly needed.
-- Don't compute results on the fly at request time — read from the DB; write computed results to tables as background tasks.
-- Don't add Celery or Redis for background tasks — use Python `threading.Thread`; the scoring job is infrequent and Docker Compose should stay at four services.
+- Don't compute baseline suitability scores here — baseline scores are computed by `agritwin-etl score` and loaded by the loader. Scenario re-scoring (with overrides applied) is the only scoring that happens in this repo, via `tasks.py`.
+- Don't add a `scoring/` module to this repo — all baseline scoring logic lives in `agritwin-etl`. `compute_scenario_scores` calls `agritwin_etl.scoring.engine.score_cells` directly.
+- Don't add additional Celery queues or workers — the single `celery_worker` service handles all scenario tasks.

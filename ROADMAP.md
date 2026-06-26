@@ -36,57 +36,72 @@ agritwin-app picks up where agritwin-etl left off. The data lake is built. This 
 
 ---
 
-## Phase 2.5 — UI Polish
+## Phase 2.5 — UI Polish + Multi-resolution map (COMPLETE)
 
-**Goal:** fix rendering performance and improve usability for field/farm browsing.
+**Goal:** fix rendering performance, improve usability, and add zoom-adaptive H3 resolution levels.
 
 ### Checklist
 
-- [x] Zoom-adaptive H3 resolution: res-6 cells at zoom < 12, res-9 at zoom ≥ 12 (fixes full-province render failure)
+- [x] 5-level zoom-adaptive map: cluster (< 5) → res-6 (5–6) → res-7 (7–8) → res-8 (9–10) → res-9 (≥ 11)
+- [x] `GET /api/cells?resolution=6|7|8|9` — multi-resolution cell endpoint
+- [x] `GET /api/cells/centroids` — res-6 centroids for MapLibre clustering source
+- [x] Weather features at res-7/8/9 resolved to res-6 parent at query time (no ERA5 duplication)
 - [x] Light basemap default (CARTO Voyager) + dark/light toggle button
-- [x] Feature color selector moved from toolbar dropdown → left sidebar radio buttons (all 26 features)
-- [x] Disabled radio buttons (with opacity) for features unavailable at current resolution
-- [x] Grid fill opacity 0.45 (was 0.55) so underlying map detail is always visible
+- [x] Feature color selector moved from toolbar dropdown → left sidebar radio buttons (all features)
+- [x] Grid fill opacity 0.45 so underlying map detail is always visible
 - [x] Right panel: two tabs (Latest default / Historic)
 - [x] Latest tab: 4 ordered sections — Terrain → Weather → Soil → Vegetation
 - [x] Historic tab: NDVI History chart + Temperature & Precipitation chart
 - [x] Right panel: drag-to-resize handle (min 300px, max 900px, width persisted to localStorage)
 - [x] Feature names: human-readable display names (e.g. "Temperature (2m)", "Organic Carbon (0–5cm)")
 - [x] Resolution badge overlay (bottom-left of map) shows current H3 resolution
+- [x] Duplicate fetch bug fixed: `_zoomFetched` flag suppresses the `moveend` that MapLibre fires after every `zoomend`
 
 ---
 
-## Phase 3 — Crop suitability scoring
+## Phase 3 — Crop suitability scoring (COMPLETE ✅ 2026-06-25)
 
 **Goal:** color cells by how suitable they are for a user-selected crop, based on observed environmental conditions vs. agronomic requirements from `crop_requirement`.
 
 **New tables:** `suitability_score`
 
+**Architecture:** Scores are computed in `agritwin-etl` (`agritwin-etl score` → `suitability_score/data.parquet`); this app is read-only. Suitability lives on its own page (`GET /suitability`) with its own map, sidebar, and JS files — zero changes to the monitoring map/panel.
+
 ### Checklist
 
-- [ ] `suitability_score` SQLAlchemy model + Alembic migration
-- [ ] Scoring function: for each cell × crop, compute weighted distance from optimal value per feature
-- [ ] CLI command or background task to score all cells × all crops → write `suitability_score` rows
-- [ ] `GET /api/suitability?crop=wheat&bbox=w,s,e,n` — returns GeoJSON with score per cell
-- [ ] Suitability map layer with graduated color scale (green = suitable → red = unsuitable)
-- [ ] Crop selector in UI
+- [x] `suitability_score` SQLAlchemy model + Alembic migration (0001_create_app_tables.py)
+- [x] Scoring computed in ETL repo: monthly trapezoidal fuzzy membership; 2.77M rows (346,787 cells × 8 crops); score range 0.049–0.921
+- [x] `GET /api/suitability/cells?bbox=w,s,e,n&crop=<name>` — GeoJSON FeatureCollection with `score` per cell
+- [x] `GET /api/suitability/cells/<h3_id>` — all 8 crop scores for one cell
+- [x] `GET /api/suitability/cells/<h3_id>/monthly?crop=<name>` — monthly actual climate vs. crop requirement for Tab 2 chart
+- [x] `GET /suitability` — dedicated suitability page (own navbar item)
+- [x] `suitability_map.js` — MapLibre choropleth at res-9; score color ramp (red→yellow→green); bbox fetch on moveend
+- [x] `suitability_panel.js` — Tab 1: 8 crop radio buttons + CSS progress bars (clicking radio recolors map); Tab 2: Chart.js band chart (shaded ideal range + actual line) with feature selector
+- [x] `base.html` — "Suitability" navbar link added
+- [x] `load.sh` — Stage 4 loads baseline scores (~2.77M rows) after spatial cells and before raw observations
+- [x] pytest covers all three suitability API endpoints
 
 ---
 
-## Phase 4 — Scenario simulation
+## Phase 4 — Scenario simulation (COMPLETE ✅ 2026-06-26)
 
-**Goal:** let the user override one or more environmental feature values for a set of cells, re-run suitability scoring with those overrides, and compare the result against the baseline.
+**Goal:** let the user draw a polygon on the map, apply additive environmental overrides (precipitation, temperature, soil pH), re-score all res-9 cells within the polygon asynchronously via Celery, and compare scenario scores against the baseline.
 
-**New tables:** `scenario`, `scenario_override`
+**New infrastructure:** Redis (Celery broker), `celery_worker` Docker service
+
+**Schema changes:** `scenario` extended with `polygon_geom`, `overrides` (JSONB), `task_id`, `status`, `scored_at` (migration 0002); `suitability_score.scenario_id` FK was added in Phase 3 migration 0001
 
 ### Checklist
 
-- [ ] `scenario` + `scenario_override` models + Alembic migration
-- [ ] Extend `suitability_score` with `scenario_id` FK
-- [ ] Scenario creation UI: draw a region, pick a feature, enter an override value (e.g. "irrigation adds 200 mm precipitation")
-- [ ] Re-score with overrides applied to selected cells
-- [ ] Side-by-side baseline vs. scenario view on the map
-- [ ] Scenario list: save, reload, delete
+- [x] Alembic migration `0002_extend_scenario_for_phase4.py` — extends `scenario` table for polygon + override storage
+- [x] `docker-compose.yml` — `redis` + `celery_worker` services added (6 services total)
+- [x] `agritwin_app/tasks.py` — `compute_scenario_scores` Celery task: loads polygon cells, applies override deltas to weather/soil observations, re-scores via ETL engine, bulk-inserts scenario `suitability_score` rows
+- [x] Scenario creation: `POST /api/scenarios` (WKT polygon + overrides dict → dispatches task); `GET /scenarios/new` → draw-polygon UI with MapboxGL Draw; override delta fields for precipitation, temperature, min temperature, soil pH
+- [x] Async status polling: `GET /api/scenarios/<id>/status` — scenario list page polls every 3 s for pending/running rows
+- [x] Scenario result page: `GET /scenarios/<id>` → dual-map layout (baseline left, scenario right, synced pan/zoom); sidebar with per-crop baseline vs. scenario score comparison and monthly requirement chart for each active override
+- [x] Scenario list: `GET /api/scenarios` ordered by recency; delete with cascade via `DELETE /api/scenarios/<id>`
+- [x] Demo scenario seed: 4 pre-built scenarios seeded by `seed_runner.py` at end of `load.sh` (Stage 6), after all ETL data is loaded
+- [x] `tests/test_api_scenario.py` — scenario CRUD, status, cell GeoJSON, and per-cell score endpoints
 
 ---
 

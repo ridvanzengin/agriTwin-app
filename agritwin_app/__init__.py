@@ -12,8 +12,13 @@ def create_app(settings: Settings | None = None) -> Flask:
     app.config["SECRET_KEY"] = settings.flask_secret_key
     app.config["DEBUG"] = settings.flask_debug
     app.config["DATABASE_URL"] = settings.database_url
+    app.config["CELERY_BROKER_URL"] = settings.celery_broker_url
+    app.config["CELERY_RESULT_BACKEND"] = settings.celery_result_backend
 
     init_db(settings.database_url)
+
+    from .tasks import init_celery
+    init_celery(settings.celery_broker_url, settings.celery_result_backend)
 
     from .api import bp as api_bp
     from .views import bp as views_bp

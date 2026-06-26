@@ -12,18 +12,18 @@ These tables are created and migrated by `agritwin-etl`. This repo reads them vi
 
 ### spatial_cell — resolution column
 
-`spatial_cell` contains cells at two H3 resolutions:
+`spatial_cell` contains cells at four H3 resolutions:
 
-| resolution | count | source |
-|---|---|---|
-| 9 | 346,787 | MODIS, SoilGrids (actual observation cells) |
-| 6 | ~7,000 | ERA5-Land parent cells (one per ~50km² ERA5 grid square) |
+| resolution | count | source | data in `observation` |
+|---|---|---|---|
+| 6 | 1,115 | `build-era5-cells` (ERA5 grid) + `build-parent-cells` (res-9 parents) | ERA5 weather + aggregated soil/NDVI/ET |
+| 7 | 7,343 | `build-parent-cells` from res-9 | aggregated soil/NDVI/ET (mean/mode) |
+| 8 | 50,056 | `build-parent-cells` from res-9 | aggregated soil/NDVI/ET (mean/mode) |
+| 9 | 346,787 | `build-cells` from Konya boundary | all raw observations |
 
-ERA5-Land weather data (temperature, precipitation, etc.) is ingested at H3 res-6 because that matches ERA5's native ~9 km resolution. The `observation.h3_id` FK references `spatial_cell.h3_id` for both resolutions.
-
-All map-display queries filter `AND sc.resolution = 9` to show only the fine-grained cells. ERA5 observations for a res-6 cell can still be fetched via `GET /api/cells/<h3_id>/timeseries` by passing a res-6 `h3_id` directly.
+ERA5-Land weather data is stored exclusively at res-6 (matches ERA5's ~9 km native grid). All other features (soil, NDVI, ET, land cover) are stored raw at res-9 and pre-aggregated to res-7/8/6 by `agritwin-etl aggregate`. Weather observations for a coarser-resolution cell are looked up by mapping it to its res-6 parent at query time (`h3.cell_to_parent(h3_id, 6)` in `api/cells.py`).
 | `crop` | 8 crops: wheat, barley, sugar beet, sunflower, maize, chickpea, lentil, cotton | Phase 3+ |
-| `crop_requirement` | Agronomic min/optimal/max/weight per feature per crop | Phase 3+ |
+| `crop_requirement` | Agronomic min/optimal/max/weight per feature per crop; `month` column (1–12, nullable) added for monthly weather requirements | Phase 3+ |
 | `crop_statistics` | FAOSTAT annual yield/harvest area/production, Turkey 2000–2023 | Phase 5+ |
 | `commodity_price` | FAOSTAT PP producer prices per crop, 2000–2023 | Phase 6+ |
 | `production_cost` | TAGEM input costs per crop (seed, fertilizer, pesticide, machinery, labor, irrigation) | Phase 6+ |
@@ -51,12 +51,12 @@ All map-display queries filter `AND sc.resolution = 9` to show only the fine-gra
 | `soil_sand_5-15cm` | soil | g/kg | SoilGrids |
 | `soil_silt_0-5cm` | soil | g/kg | SoilGrids |
 | `soil_silt_5-15cm` | soil | g/kg | SoilGrids |
-| `soil_bulk_density_0-5cm` | soil | cg/cm³ | SoilGrids |
-| `soil_bulk_density_5-15cm` | soil | cg/cm³ | SoilGrids |
-| `soil_cec_0-5cm` | soil | mmol(c)/kg | SoilGrids |
-| `soil_cec_5-15cm` | soil | mmol(c)/kg | SoilGrids |
-| `soil_nitrogen_0-5cm` | soil | cg/kg | SoilGrids |
-| `soil_nitrogen_5-15cm` | soil | cg/kg | SoilGrids |
+| `soil_bulk_density_0-5cm` | soil | kg/dm³ (= g/cm³) | SoilGrids |
+| `soil_bulk_density_5-15cm` | soil | kg/dm³ (= g/cm³) | SoilGrids |
+| `soil_cec_0-5cm` | soil | mmol/kg | SoilGrids |
+| `soil_cec_5-15cm` | soil | mmol/kg | SoilGrids |
+| `soil_nitrogen_0-5cm` | soil | g/kg | SoilGrids |
+| `soil_nitrogen_5-15cm` | soil | g/kg | SoilGrids |
 
 ---
 
@@ -69,6 +69,10 @@ Created and migrated by this repo's Alembic chain (`alembic_version_app`).
 Phase 2 is entirely read-only. No migrations needed.
 
 ### Phase 3 — suitability scoring
+
+**Architecture note:** Scores are computed in the ETL repo (`agritwin-etl score` command), written to `suitability_score.parquet`, then loaded into this table by the loader. The app only queries — no background threads, no Flask scoring CLI. Suitability lives on its own page (`GET /suitability`) with its own map and sidebar, separate from the monitoring map.
+
+**Scoring approach:** Monthly comparison — for weather features, each month's cell mean (averaged across the 2018–2023 ERA5 record) is compared against that month's crop requirement. For soil/terrain features, a single year-round comparison is used. Final cell-crop score = weighted mean of per-feature scores using trapezoidal fuzzy membership (0 = outside tolerable range, 1 = at optimal).
 
 #### scenario
 
