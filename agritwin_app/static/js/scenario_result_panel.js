@@ -184,6 +184,7 @@ async function loadRequirementsSection(h3Id, cropName) {
     title.className = 'panel-card-title';
     title.textContent = 'Parameter Scores — Before / After';
     card.appendChild(title);
+    section.appendChild(card);  // must be in DOM before forEach so getElementById works
 
     data.forEach((req) => {
         const { feature, label, unit, delta, months } = req;
@@ -253,8 +254,6 @@ async function loadRequirementsSection(h3Id, cropName) {
             }
         });
     });
-
-    section.appendChild(card);
 }
 
 // ── Public entry point (called by scenario_result_map.js) ─────────────────────
