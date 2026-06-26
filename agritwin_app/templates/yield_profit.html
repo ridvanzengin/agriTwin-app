@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Yield &amp; Profit — AgriTwin{% endblock %}
+
+{% block content %}
+<div id="yp-container">
+  <div id="yp-map"></div>
+
+  <aside id="yp-panel" class="suit-panel hidden" aria-label="Cell yield and profit">
+
+    <div id="yp-resize-handle" class="panel-resize-handle"></div>
+
+    <div class="panel-sticky-top">
+      <div class="panel-header">
+        <div class="panel-title-group">
+          <h2 class="panel-title">Yield &amp; Profit</h2>
+          <code id="yp-cell-id" class="panel-h3id">—</code>
+        </div>
+        <button id="yp-panel-close" class="panel-close" aria-label="Close panel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="panel-tabs" role="tablist">
+        <button id="yp-tab-crops" class="panel-tab active" role="tab" aria-selected="true">Crop Comparison</button>
+        <button id="yp-tab-breakdown" class="panel-tab" role="tab" aria-selected="false">Cost Breakdown</button>
+      </div>
+    </div>
+
+    <div class="panel-body">
+      <div id="yp-crops-section"></div>
+      <div id="yp-breakdown-section" style="display:none"></div>
+    </div>
+
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/yield_profit_map.js') }}"></script>
+<script src="{{ url_for('static', filename='js/yield_profit_panel.js') }}"></script>
+{% endblock %}
