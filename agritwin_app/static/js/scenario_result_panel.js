@@ -111,15 +111,13 @@ function _buildReqChart(feature, req) {
 
     const { unit, months } = req;
 
-    // Chart shows only the ideal range band — spanGaps: true connects across
-    // off-season null months, producing a continuous year-long green area.
-    // Convention mirrors suitability_panel.js: fill: '+1' on reqMin.
     _reqChartInstances[feature] = new Chart(canvas, {
         type: 'line',
         data: {
             labels: MONTH_LABELS,
             datasets: [
                 {
+                    label: 'Min req',
                     data: months.map(m => m.req_min),
                     borderColor: 'transparent',
                     backgroundColor: 'rgba(34,197,94,0.18)',
@@ -130,12 +128,36 @@ function _buildReqChart(feature, req) {
                     spanGaps: true,
                 },
                 {
+                    label: 'Max req',
                     data: months.map(m => m.req_max),
                     borderColor: 'transparent',
                     backgroundColor: 'rgba(34,197,94,0.18)',
                     borderWidth: 0,
                     fill: false,
                     pointRadius: 0,
+                    tension: 0.3,
+                    spanGaps: true,
+                },
+                {
+                    label: 'Baseline',
+                    data: months.map(m => m.baseline_value),
+                    borderColor: '#64748b',
+                    backgroundColor: 'transparent',
+                    borderWidth: 1.5,
+                    borderDash: [4, 3],
+                    fill: false,
+                    pointRadius: 2,
+                    tension: 0.3,
+                    spanGaps: true,
+                },
+                {
+                    label: 'Scenario',
+                    data: months.map(m => m.scenario_value),
+                    borderColor: '#60a5fa',
+                    backgroundColor: 'transparent',
+                    borderWidth: 1.5,
+                    fill: false,
+                    pointRadius: 2,
                     tension: 0.3,
                     spanGaps: true,
                 },
@@ -195,7 +217,7 @@ async function loadRequirementsSection(h3Id, cropName) {
         const beforeStr = beforeScore !== null ? beforeScore.toFixed(2) : '—';
         const afterStr  = afterScore  !== null ? afterScore.toFixed(2)  : '—';
         const diff      = beforeScore !== null && afterScore !== null ? afterScore - beforeScore : null;
-        const barWidth  = afterScore  !== null ? (afterScore * 100).toFixed(1) + '%' : '0%';
+        const barWidth  = afterScore  !== null ? Math.max(afterScore * 100, 2).toFixed(1) + '%' : '0%';
         const barColor  = scoreColor(afterScore);
 
         const wrapId   = `scen-req-wrap-${feature}`;
@@ -298,7 +320,7 @@ window.loadScenarioPanel = async function (h3Id) {
 
         const beforeStr = before !== null ? before.toFixed(2) : '—';
         const afterStr  = after  !== null ? after.toFixed(2)  : '—';
-        const barWidth  = after  !== null ? (after * 100).toFixed(1) + '%' : '0%';
+        const barWidth  = after  !== null ? Math.max(after * 100, 2).toFixed(1) + '%' : '0%';
         const barColor  = scoreColor(after);
         const isSelected = cropName === (window.currentCrop || 'Wheat');
 

@@ -105,7 +105,7 @@ async function loadCropScores(h3Id) {
     for (const cropName of CROP_ORDER) {
         const score        = scoreMap[cropName] ?? null;
         const scoreDisplay = score !== null ? score.toFixed(2) : '—';
-        const barWidth     = score !== null ? (score * 100).toFixed(1) + '%' : '0%';
+        const barWidth     = score !== null ? Math.max(score * 100, 2).toFixed(1) + '%' : '0%';
         const barColor     = scoreColor(score);
         const isSelected   = cropName === (window.currentCrop || 'Wheat');
 
@@ -201,7 +201,7 @@ function buildWeatherRow(item) {
           <span class="feat-unit">${item.unit}</span>
         </div>
         <div class="feat-score-track">
-          <div class="feat-score-bar" style="width:${score !== null ? (score*100).toFixed(1)+'%' : '0%'}; background:${color};"></div>
+          <div class="feat-score-bar" style="width:${score !== null ? Math.max(score*100,2).toFixed(1)+'%' : '0%'}; background:${color};"></div>
         </div>
         <span class="feat-score-val" style="color:${color}">${score !== null ? score.toFixed(2) : '—'}</span>
         <button class="feat-expand-btn" aria-label="Toggle chart" aria-expanded="false">
@@ -341,7 +341,7 @@ function buildStaticRow(item) {
           <span class="feat-unit">${item.unit}</span>
         </div>
         <div class="feat-score-track">
-          <div class="feat-score-bar" style="width:${score !== null ? (score*100).toFixed(1)+'%' : '0%'}; background:${color};"></div>
+          <div class="feat-score-bar" style="width:${score !== null ? Math.max(score*100,2).toFixed(1)+'%' : '0%'}; background:${color};"></div>
         </div>
         <span class="feat-score-val" style="color:${color}">${score !== null ? score.toFixed(2) : '—'}</span>
         <button class="feat-expand-btn" aria-label="Toggle chart" aria-expanded="false">
