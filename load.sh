@@ -132,4 +132,9 @@ else
     (cd /agritwin-etl && agritwin-etl db-load-raw-obs)
 fi
 
+# ── Stage 6: Demo scenario seed ───────────────────────────────────────────────
+# Runs after all ETL data is loaded so the Celery worker can score immediately.
+echo "[loader] Stage 6: seeding demo scenarios"
+python3 /app/seed_runner.py
+
 echo "[loader] All stages complete."

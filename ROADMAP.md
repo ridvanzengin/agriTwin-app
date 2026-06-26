@@ -83,20 +83,25 @@ agritwin-app picks up where agritwin-etl left off. The data lake is built. This 
 
 ---
 
-## Phase 4 — Scenario simulation
+## Phase 4 — Scenario simulation (COMPLETE ✅ 2026-06-26)
 
-**Goal:** let the user override one or more environmental feature values for a set of cells, re-run suitability scoring with those overrides, and compare the result against the baseline.
+**Goal:** let the user draw a polygon on the map, apply additive environmental overrides (precipitation, temperature, soil pH), re-score all res-9 cells within the polygon asynchronously via Celery, and compare scenario scores against the baseline.
 
-**New tables:** `scenario`, `scenario_override`
+**New infrastructure:** Redis (Celery broker), `celery_worker` Docker service
+
+**Schema changes:** `scenario` extended with `polygon_geom`, `overrides` (JSONB), `task_id`, `status`, `scored_at` (migration 0002); `suitability_score.scenario_id` FK was added in Phase 3 migration 0001
 
 ### Checklist
 
-- [ ] `scenario` + `scenario_override` models + Alembic migration
-- [ ] Extend `suitability_score` with `scenario_id` FK
-- [ ] Scenario creation UI: draw a region, pick a feature, enter an override value (e.g. "irrigation adds 200 mm precipitation")
-- [ ] Re-score with overrides applied to selected cells
-- [ ] Side-by-side baseline vs. scenario view on the map
-- [ ] Scenario list: save, reload, delete
+- [x] Alembic migration `0002_extend_scenario_for_phase4.py` — extends `scenario` table for polygon + override storage
+- [x] `docker-compose.yml` — `redis` + `celery_worker` services added (6 services total)
+- [x] `agritwin_app/tasks.py` — `compute_scenario_scores` Celery task: loads polygon cells, applies override deltas to weather/soil observations, re-scores via ETL engine, bulk-inserts scenario `suitability_score` rows
+- [x] Scenario creation: `POST /api/scenarios` (WKT polygon + overrides dict → dispatches task); `GET /scenarios/new` → draw-polygon UI with MapboxGL Draw; override delta fields for precipitation, temperature, min temperature, soil pH
+- [x] Async status polling: `GET /api/scenarios/<id>/status` — scenario list page polls every 3 s for pending/running rows
+- [x] Scenario result page: `GET /scenarios/<id>` → dual-map layout (baseline left, scenario right, synced pan/zoom); sidebar with per-crop baseline vs. scenario score comparison and monthly requirement chart for each active override
+- [x] Scenario list: `GET /api/scenarios` ordered by recency; delete with cascade via `DELETE /api/scenarios/<id>`
+- [x] Demo scenario seed: 4 pre-built scenarios seeded by `seed_runner.py` at end of `load.sh` (Stage 6), after all ETL data is loaded
+- [x] `tests/test_api_scenario.py` — scenario CRUD, status, cell GeoJSON, and per-cell score endpoints
 
 ---
 

@@ -84,9 +84,13 @@ services:
     restart: "no"
     environment:
       DATABASE_URL: postgresql+psycopg://agritwin:agritwin@db:5432/agritwin
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
     volumes:
       # Read-write: build-parent-cells and aggregate write new Parquet files here.
       - ../agriTwin-etl/data/processed:/agritwin-etl/data/processed
     depends_on:
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_started
