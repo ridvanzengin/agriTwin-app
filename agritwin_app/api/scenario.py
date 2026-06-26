@@ -300,6 +300,10 @@ def get_scenario_cell_requirements(scenario_id: int, h3_id: str):
                     "req_max":        req_max,
                 })
 
+            # Skip parameters where this crop has no requirement at all
+            if not any(m["req_min"] is not None for m in months_out):
+                continue
+
             result.append({
                 "feature": feature_name,
                 "label":   meta["label"],

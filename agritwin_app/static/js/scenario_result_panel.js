@@ -86,10 +86,13 @@ function renderOverrideChips() {
 }
 
 // ── Requirement charts ────────────────────────────────────────────────────────
-const _reqCharts = {};
+// Keyed by feature name so state survives crop/cell switches.
+const _openDrawers      = new Set();   // feature names whose drawer is open
+const _reqChartInstances = {};          // feature_name → Chart instance
 
 function _destroyAllCharts() {
-    Object.keys(_reqCharts).forEach(k => { _reqCharts[k].destroy(); delete _reqCharts[k]; });
+    Object.values(_reqChartInstances).forEach(c => c.destroy());
+    Object.keys(_reqChartInstances).forEach(k => delete _reqChartInstances[k]);
 }
 
 function _avgScore(months, valueKey) {
@@ -98,65 +101,43 @@ function _avgScore(months, valueKey) {
     return valid.reduce((s, m) => s + trapScore(m[valueKey], m.req_min, m.req_optimal, m.req_max), 0) / valid.length;
 }
 
-function _buildReqChart(idx, req) {
-    if (_reqCharts[idx]) { _reqCharts[idx].destroy(); }
-    const canvas = document.getElementById(`scen-req-canvas-${idx}`);
+function _buildReqChart(feature, req) {
+    if (_reqChartInstances[feature]) {
+        _reqChartInstances[feature].destroy();
+        delete _reqChartInstances[feature];
+    }
+    const canvas = document.getElementById(`scen-req-canvas-${feature}`);
     if (!canvas) return;
 
     const { unit, months } = req;
-    const unitSuffix = unit ? ` (${unit})` : '';
 
-    _reqCharts[idx] = new Chart(canvas, {
+    // Chart shows only the ideal range band — spanGaps: true connects across
+    // off-season null months, producing a continuous year-long green area.
+    // Convention mirrors suitability_panel.js: fill: '+1' on reqMin.
+    _reqChartInstances[feature] = new Chart(canvas, {
         type: 'line',
         data: {
             labels: MONTH_LABELS,
             datasets: [
                 {
-                    // Bottom edge of ideal range — no visible border, just provides the fill anchor
-                    label: '_req_min',
                     data: months.map(m => m.req_min),
                     borderColor: 'transparent',
-                    backgroundColor: 'transparent',
+                    backgroundColor: 'rgba(34,197,94,0.18)',
                     borderWidth: 0,
-                    fill: false,
+                    fill: '+1',
                     pointRadius: 0,
                     tension: 0.3,
-                    order: 4,
+                    spanGaps: true,
                 },
                 {
-                    // Top edge fills down to req_min, forming the green ideal-range band
-                    label: '_req_max',
                     data: months.map(m => m.req_max),
                     borderColor: 'transparent',
                     backgroundColor: 'rgba(34,197,94,0.18)',
                     borderWidth: 0,
-                    fill: '-1',
+                    fill: false,
                     pointRadius: 0,
                     tension: 0.3,
-                    order: 3,
-                },
-                {
-                    label: 'Baseline',
-                    data: months.map(m => m.baseline_value),
-                    borderColor: '#64748b',
-                    backgroundColor: 'transparent',
-                    borderDash: [5, 3],
-                    borderWidth: 1.5,
-                    pointRadius: 3,
-                    pointBackgroundColor: '#64748b',
-                    tension: 0.3,
-                    order: 2,
-                },
-                {
-                    label: 'Scenario',
-                    data: months.map(m => m.scenario_value),
-                    borderColor: '#38bdf8',
-                    backgroundColor: 'transparent',
-                    borderWidth: 2,
-                    pointRadius: 3,
-                    pointBackgroundColor: '#38bdf8',
-                    tension: 0.3,
-                    order: 1,
+                    spanGaps: true,
                 },
             ],
         },
@@ -164,20 +145,7 @@ function _buildReqChart(idx, req) {
             responsive: true,
             maintainAspectRatio: false,
             layout: { padding: { top: 2, right: 2, bottom: 2, left: 2 } },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: ctx => {
-                            if (ctx.dataset.label.startsWith('_')) return null;
-                            const v = ctx.parsed.y;
-                            return v !== null
-                                ? `${ctx.dataset.label}: ${v.toFixed(1)}${unit ? ' ' + unit : ''}`
-                                : null;
-                        },
-                    },
-                },
-            },
+            plugins: { legend: { display: false } },
             scales: {
                 x: {
                     ticks: { color: '#94a3b8', font: { size: 10 } },
@@ -200,6 +168,7 @@ async function loadRequirementsSection(h3Id, cropName) {
     _currentReqH3Id = h3Id;
     const section = document.getElementById('scen-requirements-section');
     _destroyAllCharts();
+    // Do NOT clear _openDrawers — drawer state persists across cell/crop switches.
 
     const crop = encodeURIComponent(cropName || window.currentCrop || 'Wheat');
     const resp = await fetch(`/api/scenarios/${SCENARIO_ID}/cells/${encodeURIComponent(h3Id)}/requirements?crop=${crop}`);
@@ -216,8 +185,8 @@ async function loadRequirementsSection(h3Id, cropName) {
     title.textContent = 'Parameter Scores — Before / After';
     card.appendChild(title);
 
-    data.forEach((req, i) => {
-        const { label, unit, delta, months } = req;
+    data.forEach((req) => {
+        const { feature, label, unit, delta, months } = req;
 
         const beforeScore = _avgScore(months, 'baseline_value');
         const afterScore  = _avgScore(months, 'scenario_value');
@@ -228,7 +197,9 @@ async function loadRequirementsSection(h3Id, cropName) {
         const barWidth  = afterScore  !== null ? (afterScore * 100).toFixed(1) + '%' : '0%';
         const barColor  = scoreColor(afterScore);
 
-        // Row mirrors .suit-crop-row / .suit-crop-label layout exactly
+        const wrapId   = `scen-req-wrap-${feature}`;
+        const canvasId = `scen-req-canvas-${feature}`;
+
         const rowEl = document.createElement('div');
         rowEl.className = 'suit-crop-row';
         rowEl.innerHTML = `
@@ -243,25 +214,42 @@ async function loadRequirementsSection(h3Id, cropName) {
               <div class="suit-score-track">
                 <div class="suit-score-bar" style="width:${barWidth}; background:${barColor};"></div>
               </div>
-              <button class="scen-req-expand" aria-expanded="false" title="Show chart">▼</button>
+              <button class="scen-req-expand" aria-expanded="false" title="Show ideal range">▼</button>
             </div>
-            <div class="scen-req-chart-wrap" id="scen-req-wrap-${i}" style="display:none">
-              <canvas id="scen-req-canvas-${i}"></canvas>
+            <div class="scen-req-chart-wrap" id="${wrapId}" style="display:none">
+              <canvas id="${canvasId}"></canvas>
             </div>`;
         card.appendChild(rowEl);
 
-        rowEl.querySelector('.scen-req-expand').addEventListener('click', function () {
-            const wrap = document.getElementById(`scen-req-wrap-${i}`);
-            const open = this.getAttribute('aria-expanded') === 'true';
+        const btn  = rowEl.querySelector('.scen-req-expand');
+        const wrap = document.getElementById(wrapId);
+
+        const autoOpening = _openDrawers.has(feature);
+        if (autoOpening) {
+            wrap.style.display = 'block';
+            btn.setAttribute('aria-expanded', 'true');
+            btn.textContent = '▲';
+            _buildReqChart(feature, req);
+        }
+
+        btn.addEventListener('click', () => {
+            const open = btn.getAttribute('aria-expanded') === 'true';
             if (open) {
                 wrap.style.display = 'none';
-                this.setAttribute('aria-expanded', 'false');
-                this.textContent = '▼';
+                btn.setAttribute('aria-expanded', 'false');
+                btn.textContent = '▼';
+                _openDrawers.delete(feature);
+                if (_reqChartInstances[feature]) {
+                    _reqChartInstances[feature].destroy();
+                    delete _reqChartInstances[feature];
+                }
             } else {
                 wrap.style.display = 'block';
-                this.setAttribute('aria-expanded', 'true');
-                this.textContent = '▲';
-                _buildReqChart(i, req);
+                btn.setAttribute('aria-expanded', 'true');
+                btn.textContent = '▲';
+                _openDrawers.add(feature);
+                _buildReqChart(feature, req);
+                setTimeout(() => wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
             }
         });
     });
@@ -283,7 +271,6 @@ window.loadScenarioPanel = async function (h3Id) {
     cropsSection.innerHTML = '<p style="color:#64748b;padding:0.5rem 0;font-size:0.8125rem">Loading…</p>';
     document.getElementById('scen-requirements-section').innerHTML = '';
 
-    // Load crops and requirements in parallel
     const [cropResp] = await Promise.all([
         fetch(`/api/scenarios/${SCENARIO_ID}/cells/${encodeURIComponent(h3Id)}`),
         loadRequirementsSection(h3Id, window.currentCrop || 'Wheat'),
@@ -339,7 +326,6 @@ window.loadScenarioPanel = async function (h3Id) {
     cropsSection.querySelectorAll('input[name="scenCrop"]').forEach(radio => {
         radio.addEventListener('change', () => {
             window.currentCrop = radio.value;
-            // Reload requirements for the new crop (if a cell is open)
             if (_currentReqH3Id) {
                 loadRequirementsSection(_currentReqH3Id, radio.value);
             }
