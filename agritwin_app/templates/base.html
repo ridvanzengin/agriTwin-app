@@ -40,7 +40,7 @@
               <line x1="9" y1="3" x2="9" y2="18"/>
               <line x1="15" y1="6" x2="15" y2="21"/>
             </svg>
-            <span class="nav-label">Monitoring</span>
+            <span class="nav-label">Field Explorer</span>
           </a>
         </li>
 
@@ -53,7 +53,7 @@
               <path d="M2 17l10 5 10-5"/>
               <path d="M2 12l10 5 10-5"/>
             </svg>
-            <span class="nav-label">Suitability</span>
+            <span class="nav-label">Crop Fit</span>
           </a>
         </li>
         <li>
@@ -76,7 +76,36 @@
               <line x1="12" y1="20" x2="12" y2="4"/>
               <line x1="6" y1="20" x2="6" y2="14"/>
             </svg>
-            <span class="nav-label">Scenarios</span>
+            <span class="nav-label">What-If	</span>
+          </a>
+        </li>
+      </ul>
+
+      <!-- Reference section -->
+      <p class="nav-section-label">Reference</p>
+      <ul class="nav-menu" role="list">
+        <li>
+          <a href="{{ url_for('views.docs_view') }}"
+             class="nav-item {% if request.endpoint == 'views.docs_view' %}active{% endif %}"
+             aria-current="{% if request.endpoint == 'views.docs_view' %}page{% endif %}">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+            </svg>
+            <span class="nav-label">Documentation</span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('views.data_sources_view') }}"
+             class="nav-item {% if request.endpoint == 'views.data_sources_view' %}active{% endif %}"
+             aria-current="{% if request.endpoint == 'views.data_sources_view' %}page{% endif %}">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <ellipse cx="12" cy="5" rx="9" ry="3"/>
+              <path d="M3 5v4c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/>
+              <path d="M3 9v4c0 1.66 4.03 3 9 3s9-1.34 9-3V9"/>
+              <path d="M3 13v4c0 1.66 4.03 3 9 3s9-1.34 9-3v-4"/>
+            </svg>
+            <span class="nav-label">Data Sources</span>
           </a>
         </li>
       </ul>
@@ -84,7 +113,7 @@
     </div>
 
     <div class="nav-footer">
-      <span class="nav-version">Phase 4</span>
+      <span class="nav-version">Phase 5/6</span>
     </div>
   </nav>
 
