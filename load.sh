@@ -118,6 +118,26 @@ else
     (cd /agritwin-etl && agritwin-etl db-load --table suitability_score)
 fi
 
+# ── Stage 4a: Yield predictions (baseline) ────────────────────────────────────
+echo "[loader] Stage 4a: yield predictions (baseline)"
+yield_count=$(_row_count_where "yield_prediction" "scenario_id IS NULL")
+if [ "${yield_count}" -gt 0 ]; then
+    echo "[loader] yield_prediction baseline: ${yield_count} rows already loaded — skipping"
+else
+    echo "[loader] Loading yield predictions..."
+    (cd /agritwin-etl && agritwin-etl db-load --table yield_prediction)
+fi
+
+# ── Stage 4b: Profit projections (baseline) ───────────────────────────────────
+echo "[loader] Stage 4b: profit projections (baseline)"
+profit_count=$(_row_count_where "profit_projection" "scenario_id IS NULL")
+if [ "${profit_count}" -gt 0 ]; then
+    echo "[loader] profit_projection baseline: ${profit_count} rows already loaded — skipping"
+else
+    echo "[loader] Loading profit projections..."
+    (cd /agritwin-etl && agritwin-etl db-load --table profit_projection)
+fi
+
 # ── Stage 5: Raw observations (res-9/res-6) ───────────────────────────────────
 # Large load (~47M rows, 5–10 min via COPY FROM STDIN).
 # App already serves coarse zoom levels from Stage 3; suitability page is already

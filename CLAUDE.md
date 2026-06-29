@@ -6,7 +6,7 @@ This file is the working agreement for Claude Code in this repository. Read it b
 
 AgriTwin's web application. A Flask + MapLibre tool that reads from the PostgreSQL data lake built by `agritwin-etl` and lets users browse H3 resolution-9 cells across Konya Province, inspect their environmental profiles (elevation, soil, weather history, NDVI), and view per-cell crop suitability scores on a dedicated suitability page.
 
-**Current phase:** Phase 4 complete — map + cell inspection (Phase 2), crop suitability page (Phase 3), and scenario simulation (Phase 4) are all shipped. Phase 5 (yield prediction) is next.
+**Current phase:** Phase 5/6 complete — map + cell inspection (Phase 2), crop suitability page (Phase 3), scenario simulation (Phase 4), and yield & profit page (Phase 5/6) are all shipped.
 
 ## What this repo is NOT
 
@@ -358,11 +358,42 @@ Shows how the cell's actual monthly climate compares to the selected crop's requ
 - [x] `scenario_result.html` + `scenario_result.js` — dual-map layout (baseline left, scenario right) synced on pan/zoom; right sidebar: crop score comparison (baseline vs. scenario score per crop) + monthly requirement chart (baseline line, scenario line, ideal band) for each active override
 - [x] `tests/test_api_scenario.py` — covers scenario CRUD, status polling, cell GeoJSON, and per-cell score endpoints
 
+## Phase 5/6 definition of done — COMPLETE ✅ (2026-06-29)
+
+**Goal:** Yield & Profit page — display per-cell, per-crop yield predictions and net profit projections.
+
+**Architecture:**
+- ETL (`agritwin-etl economics`) computes `yield_prediction.parquet` and `profit_projection.parquet` from suitability scores × FAOSTAT prices × TAGEM costs; loads into `yield_prediction` and `profit_projection` tables. App is read-only for these tables.
+- Yield & Profit has its own page (`GET /yield-profit`) with its own map (`yield_profit_map.js`) and panel (`yield_profit_panel.js`). Zero changes to other pages.
+
+**ETL economics model (see `agriTwin-etl/docs/YIELD_PROFIT_MODEL.md`):**
+- Yield formula: `ref_yield × (0.2 + 0.8 × score)` — 20% floor prevents unrealistic zero-yield cells
+- Cost formula: `TAGEM 2022 costs × CPI_FACTOR (1.40)` — adjusts to 2024 USD via Turkish agricultural input inflation
+- Prices: FAOSTAT PP latest year per crop
+
+**Phase 5/6 files:**
+- `agritwin_app/api/yield_profit.py` — `GET /api/yield-profit/cells?bbox&crop` + `GET /api/yield-profit/cells/<h3_id>`
+- `agritwin_app/views/yield_profit.py` — `GET /yield-profit` route
+- `agritwin_app/templates/yield_profit.html` — page template
+- `agritwin_app/static/js/yield_profit_map.js` — choropleth map, net_profit color ramp
+- `agritwin_app/static/js/yield_profit_panel.js` — crop comparison table + cost breakdown card
+
+**Definition of done:**
+- [x] `GET /yield-profit` renders MapLibre map colored by `net_profit` for selected crop
+- [x] Color ramp: `< −500` red → `0` yellow → `≥ +500` green
+- [x] Clicking a cell opens sidebar with all 8 crops: estimated yield, confidence badge, projected profit
+- [x] Confidence badges: High ±20% (Wheat, Barley), Medium ±40% (Sugar Beet, Sunflower, Maize, Chickpea, Lentil), Low ±60% (Cotton)
+- [x] ⓘ info icon on Sugar Beet, Chickpea, Sunflower, Maize: hover shows irrigation/rotation/capacity constraint note
+- [x] Cost breakdown card: itemised costs per crop with total footer
+- [x] ETL: costs inflation-adjusted 2022→2024 (`CPI_FACTOR = 1.40`)
+- [x] ETL: yield floored at 20% of reference (`0.2 + 0.8 × score`)
+- [x] `base.html` — "Yield & Profit" navbar link added
+
 ## Things to avoid
 
 - Don't add ingest logic, Parquet writing, or `agritwin-etl` CLI commands here.
 - Don't run Alembic against ETL-owned tables.
-- Don't add yield prediction or profit projection until scenario simulation is stable.
+- Don't recompute yield/profit on-the-fly in Flask — all economics are pre-computed by `agritwin-etl economics` and loaded into PostgreSQL.
 - Don't use React, Vue, or any JS framework — vanilla JS only.
 - Don't use npm or a JS build step — MapLibre loaded from CDN.
 - Don't add user authentication until it's explicitly needed.

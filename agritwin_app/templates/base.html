@@ -57,6 +57,17 @@
           </a>
         </li>
         <li>
+          <a href="{{ url_for('views.yield_profit_view') }}"
+             class="nav-item {% if request.endpoint == 'views.yield_profit_view' %}active{% endif %}"
+             aria-current="{% if request.endpoint == 'views.yield_profit_view' %}page{% endif %}">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="1" x2="12" y2="23"/>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+            <span class="nav-label">Yield &amp; Profit</span>
+          </a>
+        </li>
+        <li>
           <a href="{{ url_for('views.scenario_list_view') }}"
              class="nav-item {% if request.endpoint and request.endpoint.startswith('views.scenario') %}active{% endif %}"
              aria-current="{% if request.endpoint and request.endpoint.startswith('views.scenario') %}page{% endif %}">
