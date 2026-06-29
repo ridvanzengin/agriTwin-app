@@ -384,6 +384,14 @@ body { display: flex; height: 100vh; }
   text-align: right;
 }
 
+/* ─── Soil attrs scroll ─────────────────────────────────────────────────── */
+.soil-attrs-scroll {
+  max-height: 190px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #334155 transparent;
+}
+
 /* ─── Charts ────────────────────────────────────────────────────────────── */
 .chart-wrap {
   position: relative;

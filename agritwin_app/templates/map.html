@@ -65,14 +65,14 @@
         <dl class="attr-grid" id="attrs-weather"></dl>
       </div>
 
-      <div class="panel-card" id="section-soil" hidden>
-        <h3 class="panel-card-title">Soil</h3>
-        <dl class="attr-grid" id="attrs-soil"></dl>
-      </div>
-
       <div class="panel-card" id="section-vegetation" hidden>
         <h3 class="panel-card-title">Vegetation</h3>
         <dl class="attr-grid" id="attrs-vegetation"></dl>
+      </div>
+
+      <div class="panel-card" id="section-soil" hidden>
+        <h3 class="panel-card-title">Soil</h3>
+        <dl class="attr-grid soil-attrs-scroll" id="attrs-soil"></dl>
       </div>
 
     </div><!-- /tab-latest -->
@@ -88,6 +88,21 @@
       <div class="panel-card" id="card-weather-chart" hidden>
         <h3 class="panel-card-title">Temperature &amp; Precipitation</h3>
         <div class="chart-wrap"><canvas id="chart-weather"></canvas></div>
+      </div>
+
+      <div class="panel-card" id="card-temp-range" hidden>
+        <h3 class="panel-card-title">Temperature Range (Mean vs Min)</h3>
+        <div class="chart-wrap"><canvas id="chart-temp-range"></canvas></div>
+      </div>
+
+      <div class="panel-card" id="card-solar" hidden>
+        <h3 class="panel-card-title">Solar Radiation</h3>
+        <div class="chart-wrap"><canvas id="chart-solar"></canvas></div>
+      </div>
+
+      <div class="panel-card" id="card-et" hidden>
+        <h3 class="panel-card-title">Actual Evapotranspiration</h3>
+        <div class="chart-wrap"><canvas id="chart-et"></canvas></div>
       </div>
 
     </div><!-- /tab-historic -->
