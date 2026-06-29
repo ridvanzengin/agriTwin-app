@@ -401,6 +401,30 @@ body { display: flex; height: 100vh; }
 /* ─── MapLibre attribution tweak ────────────────────────────────────────── */
 .maplibregl-ctrl-attrib { font-size: 10px; }
 
+/* ─── Demo mode notice banner ───────────────────────────────────────────── */
+.demo-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(56,189,248,0.08);
+  border: 1px solid rgba(56,189,248,0.25);
+  color: #7dd3fc;
+  font-size: 13px;
+  line-height: 1.55;
+  margin-bottom: 8px;
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; transform: translateY(-4px); }
+}
+
+.demo-notice-hide {
+  animation: fadeOut 400ms ease forwards;
+}
+
 /* ─── Nav section separator label ──────────────────────────────────────── */
 .nav-section-label {
   padding: 14px 18px 4px;

@@ -189,10 +189,22 @@
     </button>
 
     <div id="submit-error" style="display:none; color:#ef4444; font-size:0.8125rem;"></div>
+
+    <div id="demo-notice" class="demo-notice" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" style="flex-shrink:0;margin-top:1px">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span>
+        Scenario creation is disabled in this public demo. Explore the
+        <a href="{{ url_for('views.scenario_list_view') }}" style="color:#38bdf8;text-decoration:none;">pre-loaded scenarios</a>
+        — drought, irrigation boost, warming, and soil acidification — to see the full What-If workflow.
+      </span>
+    </div>
   </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
+<script>const SCENARIO_CREATION_ENABLED = {{ creation_enabled | tojson }};</script>
 <script src="{{ url_for('static', filename='js/scenario_new.js') }}"></script>
 {% endblock %}

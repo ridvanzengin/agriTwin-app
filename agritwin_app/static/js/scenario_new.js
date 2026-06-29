@@ -185,6 +185,23 @@ scenarioNameInput.addEventListener('input', validateForm);
 
 // ── Form submission ───────────────────────────────────────────────────────────
 submitBtn.addEventListener('click', async () => {
+    if (!SCENARIO_CREATION_ENABLED) {
+        const notice = document.getElementById('demo-notice');
+        if (notice) {
+            notice.hidden = false;
+            notice.classList.remove('demo-notice-hide');
+            clearTimeout(notice._hideTimer);
+            notice._hideTimer = setTimeout(() => {
+                notice.classList.add('demo-notice-hide');
+                notice.addEventListener('animationend', () => {
+                    notice.hidden = true;
+                    notice.classList.remove('demo-notice-hide');
+                }, { once: true });
+            }, 6000);
+        }
+        return;
+    }
+
     submitError.style.display = 'none';
     submitBtn.disabled = true;
     submitBtn.textContent = 'Submitting…';

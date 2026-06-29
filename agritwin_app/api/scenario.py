@@ -1,5 +1,5 @@
 import json
-from flask import jsonify, request, Response
+from flask import jsonify, request, Response, current_app
 from shapely import wkt as shapely_wkt
 from sqlalchemy import text
 from . import bp
@@ -39,6 +39,9 @@ def list_scenarios():
 
 @bp.post("/scenarios")
 def create_scenario():
+    if not current_app.config.get("SCENARIO_CREATION_ENABLED", False):
+        return jsonify({"error": "Scenario creation is disabled in this deployment."}), 403
+
     body = request.get_json(silent=True)
     if not body:
         return jsonify({"error": "JSON body required"}), 400

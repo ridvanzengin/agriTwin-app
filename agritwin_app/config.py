@@ -7,5 +7,6 @@ class Settings(BaseSettings):
     flask_debug: bool = False
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/0"
+    scenario_creation_enabled: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
