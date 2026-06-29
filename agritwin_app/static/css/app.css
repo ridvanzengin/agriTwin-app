@@ -393,6 +393,20 @@ body { display: flex; height: 100vh; }
 /* ─── MapLibre attribution tweak ────────────────────────────────────────── */
 .maplibregl-ctrl-attrib { font-size: 10px; }
 
+/* ─── Yield & Profit page layout ────────────────────────────────────────── */
+#yp-container {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  position: relative;
+}
+
+#yp-map {
+  flex: 1;
+  min-width: 0;
+}
+
 /* ─── Suitability page layout ───────────────────────────────────────────── */
 #suitability-container {
   flex: 1;
@@ -478,6 +492,23 @@ body { display: flex; height: 100vh; }
   font-family: ui-monospace, "SF Mono", monospace;
   flex-shrink: 0;
 }
+
+/* ─── Yield-profit info icon ─────────────────────────────────────────────── */
+.yp-info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(148,163,184,0.15);
+  color: #94a3b8;
+  font-size: 10px;
+  font-style: normal;
+  cursor: help;
+  flex-shrink: 0;
+}
+.yp-info-icon:hover { background: rgba(148,163,184,0.3); color: #cbd5e1; }
 
 /* ─── Feature breakdown rows ─────────────────────────────────────────────── */
 .feat-row {
