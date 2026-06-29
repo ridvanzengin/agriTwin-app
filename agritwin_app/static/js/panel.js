@@ -3,6 +3,9 @@
 // ── State ──────────────────────────────────────────────────────────────────
 let ndviChart = null;
 let weatherChart = null;
+let tempRangeChart = null;
+let solarChart = null;
+let etChart = null;
 let isResizing = false;
 let cachedFeatures = null;  // populated once from GET /api/features
 
@@ -29,6 +32,9 @@ function activateTab(tabName) {
   if (tabName === 'historic') {
     ndviChart?.resize();
     weatherChart?.resize();
+    tempRangeChart?.resize();
+    solarChart?.resize();
+    etChart?.resize();
   }
 }
 
@@ -147,6 +153,108 @@ function renderWeatherChart(tempData, precipData) {
   });
 }
 
+function renderTempRangeChart(tempData, tminData) {
+  tempRangeChart = destroyChart(tempRangeChart);
+  const card = document.getElementById('card-temp-range');
+  const canvas = document.getElementById('chart-temp-range');
+  const hasTemp = tempData?.data?.length > 0;
+  const hasTmin = tminData?.data?.length > 0;
+  if (!hasTemp && !hasTmin) { card.hidden = true; return; }
+  card.hidden = false;
+
+  const source = hasTemp ? tempData : tminData;
+  const labels = source.data.map(d => d.timestamp.slice(0, 7));
+  const datasets = [];
+
+  if (hasTemp) datasets.push({
+    label: 'Mean (°C)', type: 'line',
+    data: tempData.data.map(d => d.value),
+    borderColor: '#f97316', backgroundColor: 'rgba(249,115,22,0)',
+    borderWidth: 2, pointRadius: 1.5, fill: false, tension: 0.3, order: 1,
+  });
+  if (hasTmin) datasets.push({
+    label: 'Min (°C)', type: 'line',
+    data: tminData.data.map(d => d.value),
+    borderColor: '#818cf8', backgroundColor: 'rgba(129,140,248,0.18)',
+    borderWidth: 1.5, pointRadius: 1.5,
+    fill: hasTemp ? '-1' : false,
+    tension: 0.3, order: 2,
+  });
+
+  tempRangeChart = new Chart(canvas, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: true, labels: { color: CHART_TICK, boxWidth: 12, font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: CHART_TICK, maxTicksLimit: 8, maxRotation: 0 }, grid: { color: CHART_GRID } },
+        y: { ticks: { color: CHART_TICK }, grid: { color: CHART_GRID } },
+      },
+    },
+  });
+}
+
+function renderSolarChart(data) {
+  solarChart = destroyChart(solarChart);
+  const card = document.getElementById('card-solar');
+  const canvas = document.getElementById('chart-solar');
+  if (!data?.data?.length) { card.hidden = true; return; }
+  card.hidden = false;
+
+  solarChart = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: data.data.map(d => d.timestamp.slice(0, 7)),
+      datasets: [{
+        label: 'Solar Radiation (MJ/m²)',
+        data: data.data.map(d => d.value),
+        backgroundColor: 'rgba(251,191,36,0.28)',
+        borderColor: '#fbbf24',
+        borderWidth: 1.5,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: CHART_TICK, maxTicksLimit: 8, maxRotation: 0 }, grid: { color: CHART_GRID } },
+        y: { ticks: { color: CHART_TICK }, grid: { color: CHART_GRID } },
+      },
+    },
+  });
+}
+
+function renderEtChart(data) {
+  etChart = destroyChart(etChart);
+  const card = document.getElementById('card-et');
+  const canvas = document.getElementById('chart-et');
+  if (!data?.data?.length) { card.hidden = true; return; }
+  card.hidden = false;
+
+  etChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: data.data.map(d => d.timestamp.slice(0, 10)),
+      datasets: [{
+        label: 'Actual ET (mm)',
+        data: data.data.map(d => d.value),
+        borderColor: '#0ea5e9',
+        backgroundColor: 'rgba(14,165,233,0.12)',
+        borderWidth: 1.5, pointRadius: 1.5, fill: true, tension: 0.3,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: CHART_TICK, maxTicksLimit: 6, maxRotation: 0 }, grid: { color: CHART_GRID } },
+        y: { ticks: { color: CHART_TICK }, grid: { color: CHART_GRID } },
+      },
+    },
+  });
+}
+
 // ── Data fetching ─────────────────────────────────────────────────────────
 async function fetchTimeseries(h3Id, featureName) {
   const resp = await fetch(
@@ -172,17 +280,23 @@ async function openCellPanel(h3Id) {
     if (el) el.hidden = true;
   });
 
-  const [cellData, ndviTs, tempTs, precipTs] = await Promise.all([
+  const [cellData, ndviTs, tempTs, precipTs, tminTs, solarTs, etTs] = await Promise.all([
     fetch(`/api/cells/${encodeURIComponent(h3Id)}`).then(r => r.json()),
     fetchTimeseries(h3Id, 'ndvi'),
     fetchTimeseries(h3Id, 'temperature_2m'),
     fetchTimeseries(h3Id, 'precipitation'),
+    fetchTimeseries(h3Id, 'temperature_2m_min'),
+    fetchTimeseries(h3Id, 'solar_radiation'),
+    fetchTimeseries(h3Id, 'actual_et'),
   ]);
 
   const resolution = window.getCurrentResolution?.() ?? 9;
   buildLatestTab(cellData, resolution);
   renderNdviChart(ndviTs);
   renderWeatherChart(tempTs, precipTs);
+  renderTempRangeChart(tempTs, tminTs);
+  renderSolarChart(solarTs);
+  renderEtChart(etTs);
 
   // Sync the checked radio with whatever feature the map is currently coloring
   const feat = window.getCurrentFeature?.() ?? 'elevation';
@@ -219,6 +333,9 @@ function initResizeHandle() {
     document.documentElement.style.setProperty('--panel-width', `${newWidth}px`);
     ndviChart?.resize();
     weatherChart?.resize();
+    tempRangeChart?.resize();
+    solarChart?.resize();
+    etChart?.resize();
   });
 
   document.addEventListener('mouseup', () => {
@@ -248,6 +365,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('cell-panel').hidden = true;
     ndviChart = destroyChart(ndviChart);
     weatherChart = destroyChart(weatherChart);
+    tempRangeChart = destroyChart(tempRangeChart);
+    solarChart = destroyChart(solarChart);
+    etChart = destroyChart(etChart);
   });
 
   // Delegate radio changes: any colorFeature radio click updates the map color

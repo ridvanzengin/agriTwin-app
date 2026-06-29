@@ -14,6 +14,7 @@ def create_app(settings: Settings | None = None) -> Flask:
     app.config["DATABASE_URL"] = settings.database_url
     app.config["CELERY_BROKER_URL"] = settings.celery_broker_url
     app.config["CELERY_RESULT_BACKEND"] = settings.celery_result_backend
+    app.config["SCENARIO_CREATION_ENABLED"] = settings.scenario_creation_enabled
 
     init_db(settings.database_url)
 

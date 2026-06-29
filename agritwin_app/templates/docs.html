@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Documentation — AgriTwin{% endblock %}
+
+{% block content %}
+<div class="docs-page">
+  <div class="docs-inner">
+
+    <!-- ── Header ── -->
+    <div class="docs-header">
+      <h1 class="docs-title">Documentation</h1>
+      <p class="docs-subtitle">AgriTwin — Agricultural digital twin for Konya Province, Turkey</p>
+    </div>
+
+    <!-- ── About ── -->
+    <section class="docs-section">
+      <h2 class="docs-section-title">About the Project</h2>
+      <p class="docs-p">
+        AgriTwin is an open agricultural digital twin for Konya Province, Turkey — the country's single largest
+        and most productive agricultural region, covering roughly 40,000 km². It integrates satellite imagery,
+        climate reanalysis, and soil survey data into a unified PostgreSQL database indexed on the
+        <a class="docs-link" href="https://h3geo.org" target="_blank" rel="noopener">H3 hexagonal grid</a>
+        at five resolution levels (res-6 through res-9).
+      </p>
+      <p class="docs-p">
+        The platform lets agronomists, planners, and researchers explore field-level environmental conditions,
+        score crop suitability, model what-if scenarios, and evaluate economic outcomes — directly in a browser,
+        with no software to install.
+      </p>
+
+      <div class="docs-stat-grid">
+        <div class="docs-stat">
+          <span class="docs-stat-value">346,787</span>
+          <span class="docs-stat-label">H3 res-9 cells<br><span class="docs-stat-sub">~0.1 km² each</span></span>
+        </div>
+        <div class="docs-stat">
+          <span class="docs-stat-value">1,007</span>
+          <span class="docs-stat-label">ERA5 res-6 cells<br><span class="docs-stat-sub">~86 km² each</span></span>
+        </div>
+        <div class="docs-stat">
+          <span class="docs-stat-value">8</span>
+          <span class="docs-stat-label">Crops scored<br><span class="docs-stat-sub">per cell, baseline</span></span>
+        </div>
+        <div class="docs-stat">
+          <span class="docs-stat-value">2018–2023</span>
+          <span class="docs-stat-label">Temporal range<br><span class="docs-stat-sub">ERA5 / MODIS monthly</span></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Features ── -->
+    <section class="docs-section">
+      <h2 class="docs-section-title">Features</h2>
+
+      <div class="docs-feature-card">
+        <div class="docs-feature-header">
+          <svg class="docs-feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
+            <line x1="9" y1="3" x2="9" y2="18"/>
+            <line x1="15" y1="6" x2="15" y2="21"/>
+          </svg>
+          <h3 class="docs-feature-title">Field Explorer</h3>
+          <span class="docs-feature-route">/</span>
+        </div>
+        <p class="docs-p">
+          Browse the full H3 grid across five zoom levels — from 86 km² ERA5 weather cells down to 0.1 km²
+          field-level cells. Click any cell to open the detail sidebar with two tabs:
+        </p>
+        <ul class="docs-list">
+          <li><strong>Latest</strong> — terrain (elevation, slope, aspect), weather snapshot, vegetation indices,
+            and soil properties. Each row is also a radio button that recolors the map by that feature.</li>
+          <li><strong>Historic</strong> — multi-year timeseries charts: NDVI history, temperature &amp; precipitation,
+            temperature range (mean vs min), solar radiation, and actual evapotranspiration.</li>
+        </ul>
+        <p class="docs-p">
+          The map recolors on every pan and zoom, fetching only cells in the current viewport via a
+          <code class="docs-code">?bbox=</code> API. Panel width is drag-resizable and persists in localStorage.
+        </p>
+      </div>
+
+      <div class="docs-feature-card">
+        <div class="docs-feature-header">
+          <svg class="docs-feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+          <h3 class="docs-feature-title">Crop Fit</h3>
+          <span class="docs-feature-route">/suitability</span>
+        </div>
+        <p class="docs-p">
+          Pre-computed suitability scores (0–1) for 8 crops per res-9 cell, using a
+          <strong>trapezoidal fuzzy membership function</strong> against monthly ERA5 climate data and SoilGrids
+          soil properties. Scores are computed by the ETL pipeline and stored in the database; the app is read-only.
+        </p>
+        <ul class="docs-list">
+          <li><strong>Tab 1 — Crop Scores</strong>: 8 crop rows with radio buttons, CSS progress bars, and numeric
+            scores (0.00–1.00). Selecting a crop radio recolors the map immediately.</li>
+          <li><strong>Tab 2 — Monthly Detail</strong>: Chart.js band chart overlaying the actual monthly climate
+            value for this cell against the crop's ideal min/max requirement band — one feature at a time.
+            Growing-season months only; off-season months show no band.</li>
+        </ul>
+        <p class="docs-p">
+          Color ramp: <span class="docs-badge" style="background:rgba(239,68,68,0.2);color:#f87171;">0.0 = red (poor)</span>
+          → <span class="docs-badge" style="background:rgba(234,179,8,0.2);color:#fbbf24;">0.5 = yellow</span>
+          → <span class="docs-badge" style="background:rgba(34,197,94,0.2);color:#4ade80;">1.0 = green (ideal)</span>
+        </p>
+        <p class="docs-p"><strong>Scored crops:</strong> Wheat · Barley · Sugar Beet · Sunflower · Maize · Chickpea · Lentil · Cotton</p>
+      </div>
+
+      <div class="docs-feature-card">
+        <div class="docs-feature-header">
+          <svg class="docs-feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="1" x2="12" y2="23"/>
+            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+          </svg>
+          <h3 class="docs-feature-title">Yield &amp; Profit</h3>
+          <span class="docs-feature-route">/yield-profit</span>
+        </div>
+        <p class="docs-p">
+          Pre-computed economic projections per cell per crop, built from suitability scores, FAOSTAT commodity
+          prices, and TAGEM production costs.
+        </p>
+        <ul class="docs-list">
+          <li><strong>Yield estimate</strong>: <code class="docs-code">ref_yield × (0.2 + 0.8 × score)</code> — the
+            20% floor prevents unrealistic zero-yield cells.</li>
+          <li><strong>Net profit</strong>: <code class="docs-code">yield × price − total_cost</code>, where costs are
+            TAGEM 2022 figures CPI-adjusted to 2024 (factor 1.40).</li>
+          <li><strong>Confidence bands</strong>: High ±20% (Wheat, Barley) · Medium ±40% (most crops) · Low ±60% (Cotton).</li>
+          <li><strong>ⓘ notes</strong> for Sugar Beet, Chickpea, Sunflower, Maize flag irrigation requirements,
+            rotation constraints, and regional processing capacity limits.</li>
+        </ul>
+        <p class="docs-p">
+          Map color ramp: <span class="docs-badge" style="background:rgba(239,68,68,0.2);color:#f87171;">loss</span>
+          → <span class="docs-badge" style="background:rgba(234,179,8,0.2);color:#fbbf24;">break-even</span>
+          → <span class="docs-badge" style="background:rgba(34,197,94,0.2);color:#4ade80;">profit</span>
+          (breakpoints at −500 / 0 / +500 USD/ha)
+        </p>
+      </div>
+
+      <div class="docs-feature-card">
+        <div class="docs-feature-header">
+          <svg class="docs-feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10"/>
+            <line x1="12" y1="20" x2="12" y2="4"/>
+            <line x1="6" y1="20" x2="6" y2="14"/>
+          </svg>
+          <h3 class="docs-feature-title">What-If</h3>
+          <span class="docs-feature-route">/scenarios</span>
+        </div>
+        <p class="docs-p">
+          Draw a polygon over any area on the map and apply environmental override deltas — then watch cells
+          re-scored in the background by a Celery worker.
+        </p>
+        <ul class="docs-list">
+          <li><strong>Overrides</strong>: precipitation (±mm/month), temperature (±°C), soil pH (±units). Deltas
+            are additive on top of the observed ERA5 / SoilGrids values.</li>
+          <li><strong>Result page</strong>: side-by-side dual map (baseline left, scenario right) synced on
+            pan and zoom. Right sidebar shows baseline vs scenario score per crop, plus a monthly chart
+            overlaying baseline and override climate lines against the ideal requirement band.</li>
+          <li><strong>Demo scenarios</strong>: four pre-seeded examples cover drought, irrigation boost, warming,
+            and soil acidification — available immediately without drawing a polygon.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ── Technical overview ── -->
+    <section class="docs-section">
+      <h2 class="docs-section-title">Technical Overview</h2>
+
+      <table class="docs-table">
+        <thead>
+          <tr><th>Layer</th><th>Technology</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Spatial indexing</td><td>H3 hexagonal grid (Uber) — res-6 to res-9</td></tr>
+          <tr><td>Database</td><td>PostgreSQL 16 + PostGIS 3 + TimescaleDB</td></tr>
+          <tr><td>ETL pipeline</td><td>Python 3.11, pandas, xarray, h3-py, Alembic</td></tr>
+          <tr><td>Web backend</td><td>Flask 3.x, SQLAlchemy 2.x, GeoAlchemy2</td></tr>
+          <tr><td>Async scoring</td><td>Celery + Redis</td></tr>
+          <tr><td>Frontend</td><td>MapLibre GL JS, Chart.js, vanilla JS (no build step)</td></tr>
+          <tr><td>Containerization</td><td>Docker Compose — db, redis, migrate, web, celery_worker, loader</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="docs-h3">H3 Zoom Ladder</h3>
+      <p class="docs-p">The monitoring map uses five zoom modes to balance data volume with spatial fidelity:</p>
+      <table class="docs-table">
+        <thead>
+          <tr><th>Map Zoom</th><th>H3 Resolution</th><th>Cell area</th><th>Data shown</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>&lt; 7</td><td>Cluster</td><td>—</td><td>Centroid clusters (MapLibre native)</td></tr>
+          <tr><td>7–8</td><td>res-6</td><td>~86 km²</td><td>ERA5 weather only</td></tr>
+          <tr><td>9–10</td><td>res-7</td><td>~12 km²</td><td>All features (aggregated)</td></tr>
+          <tr><td>11</td><td>res-8</td><td>~1.8 km²</td><td>All features (aggregated)</td></tr>
+          <tr><td>≥ 12</td><td>res-9</td><td>~0.1 km²</td><td>All features (raw observations)</td></tr>
+        </tbody>
+      </table>
+
+      <p class="docs-p" style="margin-top:6px;">
+        ERA5 weather observations are stored only at res-6. For higher-resolution cells the API maps each cell
+        to its res-6 parent at query time — no duplication.
+      </p>
+    </section>
+
+  </div><!-- /docs-inner -->
+</div><!-- /docs-page -->
+{% endblock %}

@@ -1,18 +1,22 @@
 import json
-from flask import render_template, abort
+from flask import render_template, abort, current_app
 from sqlalchemy import text
 from . import bp
 from ..db.session import get_session
 
 
+def _creation_enabled() -> bool:
+    return current_app.config.get("SCENARIO_CREATION_ENABLED", False)
+
+
 @bp.get("/scenarios")
 def scenario_list_view():
-    return render_template("scenario_list.html")
+    return render_template("scenario_list.html", creation_enabled=_creation_enabled())
 
 
 @bp.get("/scenarios/new")
 def scenario_new_view():
-    return render_template("scenario_new.html")
+    return render_template("scenario_new.html", creation_enabled=_creation_enabled())
 
 
 @bp.get("/scenarios/<int:scenario_id>")

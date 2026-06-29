@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+{% block title %}Data Sources — AgriTwin{% endblock %}
+
+{% block content %}
+<div class="docs-page">
+  <div class="docs-inner">
+
+    <!-- ── Header ── -->
+    <div class="docs-header">
+      <h1 class="docs-title">Data Sources</h1>
+      <p class="docs-subtitle">Seven public datasets integrated into the AgriTwin database</p>
+    </div>
+
+    <p class="docs-p" style="margin-bottom:28px;">
+      All data is downloaded and processed by the <code class="docs-code">agritwin-etl</code> pipeline.
+      Raw files are stored in <code class="docs-code">agriTwin-etl/data/</code>; processed Parquet files
+      in <code class="docs-code">data/processed/</code>. The loader bulk-copies Parquet into PostgreSQL via
+      <code class="docs-code">COPY FROM STDIN</code>.
+    </p>
+
+    <!-- ── ERA5-Land ── -->
+    <div class="ds-card">
+      <div class="ds-card-header">
+        <div class="ds-badge ds-badge-weather">Weather</div>
+        <h2 class="ds-title">ERA5-Land</h2>
+        <span class="ds-provider">ECMWF / Copernicus Climate Data Store</span>
+      </div>
+      <p class="docs-p">
+        Monthly reanalysis of land-surface climate variables at ~9 km resolution, covering the full ERA5 archive.
+        Stored at H3 <strong>res-6</strong> cells only (~1,007 cells over Konya). Higher-resolution cells look up
+        their res-6 parent at query time.
+      </p>
+      <div class="ds-meta-grid">
+        <div class="ds-meta-item"><span class="ds-meta-label">Spatial resolution</span><span class="ds-meta-val">~9 km (0.1°)</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">H3 level stored</span><span class="ds-meta-val">res-6</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">Temporal step</span><span class="ds-meta-val">Monthly</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">Coverage</span><span class="ds-meta-val">2018 – 2023</span></div>
+      </div>
+      <table class="docs-table ds-table">
+        <thead><tr><th>Feature name</th><th>Unit</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code class="docs-code">temperature_2m</code></td><td>°C</td><td>Monthly mean of 2 m air temperature</td></tr>
+          <tr><td><code class="docs-code">precipitation</code></td><td>mm/month</td><td>Monthly total (daily mean × days in month)</td></tr>
+          <tr><td><code class="docs-code">solar_radiation</code></td><td>MJ/m²/month</td><td>Surface solar radiation downwards, monthly total</td></tr>
+          <tr><td><code class="docs-code">dewpoint_2m</code></td><td>°C</td><td>Monthly mean 2 m dewpoint temperature</td></tr>
+          <tr><td><code class="docs-code">wind_u_10m</code></td><td>m/s</td><td>Eastward wind component at 10 m</td></tr>
+          <tr><td><code class="docs-code">wind_v_10m</code></td><td>m/s</td><td>Northward wind component at 10 m</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── ERA5-Land TMin ── -->
+    <div class="ds-card">
+      <div class="ds-card-header">
+        <div class="ds-badge ds-badge-weather">Weather</div>
+        <h2 class="ds-title">ERA5-Land — Minimum Temperature</h2>
+        <span class="ds-provider">ECMWF / Copernicus Climate Data Store</span>
+      </div>
+      <p class="docs-p">
+        Separate ERA5-Land download for daily minimum temperature, resampled to monthly minima.
+        Used in crop suitability scoring to assess frost risk during critical growth stages.
+      </p>
+      <div class="ds-meta-grid">
+        <div class="ds-meta-item"><span class="ds-meta-label">Spatial resolution</span><span class="ds-meta-val">~9 km (0.1°)</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">H3 level stored</span><span class="ds-meta-val">res-6</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">Temporal step</span><span class="ds-meta-val">Monthly</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">Coverage</span><span class="ds-meta-val">2018 – 2023</span></div>
+      </div>
+      <table class="docs-table ds-table">
+        <thead><tr><th>Feature name</th><th>Unit</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code class="docs-code">temperature_2m_min</code></td><td>°C</td><td>Monthly minimum of daily 2 m minimum temperature</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── MODIS MOD13A3 ── -->
+    <div class="ds-card">
+      <div class="ds-card-header">
+        <div class="ds-badge ds-badge-vegetation">Vegetation</div>
+        <h2 class="ds-title">MODIS MOD13A3</h2>
+        <span class="ds-provider">NASA Land Processes DAAC</span>
+      </div>
+      <p class="docs-p">
+        Monthly vegetation index product derived from Terra MODIS imagery. Provides NDVI (Normalized
+        Difference Vegetation Index) and land cover classification at 500 m resolution, mapped to H3 res-9 cells.
+      </p>
+      <div class="ds-meta-grid">
+        <div class="ds-meta-item"><span class="ds-meta-label">Spatial resolution</span><span class="ds-meta-val">500 m</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">H3 level stored</span><span class="ds-meta-val">res-9</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">Temporal step</span><span class="ds-meta-val">Monthly</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">Coverage</span><span class="ds-meta-val">2018 – 2023</span></div>
+      </div>
+      <table class="docs-table ds-table">
+        <thead><tr><th>Feature name</th><th>Unit</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code class="docs-code">ndvi</code></td><td>—</td><td>NDVI index (−1 to 1); higher values = denser green vegetation</td></tr>
+          <tr><td><code class="docs-code">land_cover_type</code></td><td>class</td><td>MODIS MCD12Q1 IGBP land cover class (integer); aggregated by mode</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── MODIS MOD16A2 ── -->
+    <div class="ds-card">
+      <div class="ds-card-header">
+        <div class="ds-badge ds-badge-water">Water</div>
+        <h2 class="ds-title">MODIS MOD16A2 — Evapotranspiration</h2>
+        <span class="ds-provider">NASA Land Processes DAAC</span>
+      </div>
+      <p class="docs-p">
+        8-day global terrestrial evapotranspiration product derived from MODIS land cover, albedo, and LAI
+        inputs. Actual ET reflects real vegetation water use and is a direct input to irrigation planning.
+      </p>
+      <div class="ds-meta-grid">
+        <div class="ds-meta-item"><span class="ds-meta-label">Spatial resolution</span><span class="ds-meta-val">500 m</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">H3 level stored</span><span class="ds-meta-val">res-9</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">Temporal step</span><span class="ds-meta-val">8-day</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">Coverage</span><span class="ds-meta-val">2018 – 2023</span></div>
+      </div>
+      <table class="docs-table ds-table">
+        <thead><tr><th>Feature name</th><th>Unit</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code class="docs-code">actual_et</code></td><td>mm/8-day</td><td>Actual evapotranspiration per 8-day composite period</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── SoilGrids ── -->
+    <div class="ds-card">
+      <div class="ds-card-header">
+        <div class="ds-badge ds-badge-soil">Soil</div>
+        <h2 class="ds-title">SoilGrids v2.0</h2>
+        <span class="ds-provider">ISRIC — World Soil Information</span>
+      </div>
+      <p class="docs-p">
+        Global gridded soil property predictions at 250 m resolution from the ISRIC World Soil Information service,
+        derived from machine learning on soil profiles, remote sensing, and terrain data. Four depth layers
+        (0–5, 5–15, 15–30, 30–60 cm) are averaged to a single mean value per cell.
+        These are <strong>static</strong> — a single observation per cell, no temporal dimension.
+      </p>
+      <div class="ds-meta-grid">
+        <div class="ds-meta-item"><span class="ds-meta-label">Spatial resolution</span><span class="ds-meta-val">250 m</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">H3 level stored</span><span class="ds-meta-val">res-9</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">Temporal step</span><span class="ds-meta-val">Static (2021)</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">Depth averaged</span><span class="ds-meta-val">0–60 cm (4 layers)</span></div>
+      </div>
+      <table class="docs-table ds-table">
+        <thead><tr><th>Feature name</th><th>Unit</th><th>Property</th></tr></thead>
+        <tbody>
+          <tr><td><code class="docs-code">soil_ph</code></td><td>pH</td><td>Soil pH in water (phh2o)</td></tr>
+          <tr><td><code class="docs-code">soil_organic_carbon</code></td><td>g/kg</td><td>Soil organic carbon content (soc)</td></tr>
+          <tr><td><code class="docs-code">soil_clay</code></td><td>g/kg</td><td>Clay fraction mass fraction</td></tr>
+          <tr><td><code class="docs-code">soil_sand</code></td><td>g/kg</td><td>Sand fraction mass fraction</td></tr>
+          <tr><td><code class="docs-code">soil_silt</code></td><td>g/kg</td><td>Silt fraction mass fraction</td></tr>
+          <tr><td><code class="docs-code">soil_bulk_density</code></td><td>kg/dm³</td><td>Fine earth bulk density (bdod)</td></tr>
+          <tr><td><code class="docs-code">soil_cec</code></td><td>mmol/kg</td><td>Cation exchange capacity at pH 7</td></tr>
+          <tr><td><code class="docs-code">soil_nitrogen</code></td><td>g/kg</td><td>Total nitrogen content</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── SRTM ── -->
+    <div class="ds-card">
+      <div class="ds-card-header">
+        <div class="ds-badge ds-badge-terrain">Terrain</div>
+        <h2 class="ds-title">SRTM Digital Elevation Model</h2>
+        <span class="ds-provider">NASA / USGS</span>
+      </div>
+      <p class="docs-p">
+        Shuttle Radar Topography Mission 1 arc-second (~30 m) global DEM. Elevation, slope, and aspect are
+        derived from the DEM tiles and stored as columns directly on the <code class="docs-code">spatial_cell</code>
+        table (not in the <code class="docs-code">observation</code> table). These are <strong>static</strong>.
+      </p>
+      <div class="ds-meta-grid">
+        <div class="ds-meta-item"><span class="ds-meta-label">Spatial resolution</span><span class="ds-meta-val">~30 m (1 arc-sec)</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">H3 level stored</span><span class="ds-meta-val">res-7/8/9 cells</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">Temporal step</span><span class="ds-meta-val">Static (2000)</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">Aggregation</span><span class="ds-meta-val">Mean elev/slope; circular mean aspect</span></div>
+      </div>
+      <table class="docs-table ds-table">
+        <thead><tr><th>Column</th><th>Unit</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code class="docs-code">elevation</code></td><td>m</td><td>Mean elevation of H3 cell pixels</td></tr>
+          <tr><td><code class="docs-code">slope</code></td><td>°</td><td>Mean slope angle of H3 cell pixels</td></tr>
+          <tr><td><code class="docs-code">aspect</code></td><td>°</td><td>Circular mean aspect (0°=N, 90°=E, 180°=S)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── FAOSTAT ── -->
+    <div class="ds-card">
+      <div class="ds-card-header">
+        <div class="ds-badge ds-badge-economics">Economics</div>
+        <h2 class="ds-title">FAOSTAT Producer Prices</h2>
+        <span class="ds-provider">Food and Agriculture Organization of the United Nations</span>
+      </div>
+      <p class="docs-p">
+        Annual producer price data for Turkey by crop commodity, sourced from the FAOSTAT API. The latest
+        available year is used for each crop. Prices are in USD/tonne and feed directly into the profit
+        projection formula on the Yield &amp; Profit page.
+      </p>
+      <div class="ds-meta-grid">
+        <div class="ds-meta-item"><span class="ds-meta-label">Spatial resolution</span><span class="ds-meta-val">National (Turkey)</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">Temporal step</span><span class="ds-meta-val">Annual</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">Table</span><span class="ds-meta-val">commodity_price</span></div>
+      </div>
+      <table class="docs-table ds-table">
+        <thead><tr><th>Crop</th><th>Price (USD/tonne, approx.)</th></tr></thead>
+        <tbody>
+          <tr><td>Wheat</td><td>~240</td></tr>
+          <tr><td>Barley</td><td>~210</td></tr>
+          <tr><td>Sugar Beet</td><td>~45</td></tr>
+          <tr><td>Sunflower</td><td>~530</td></tr>
+          <tr><td>Maize</td><td>~220</td></tr>
+          <tr><td>Chickpea</td><td>~680</td></tr>
+          <tr><td>Lentil</td><td>~620</td></tr>
+          <tr><td>Cotton</td><td>~1,450</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── TAGEM ── -->
+    <div class="ds-card">
+      <div class="ds-card-header">
+        <div class="ds-badge ds-badge-economics">Economics</div>
+        <h2 class="ds-title">TAGEM Production Costs</h2>
+        <span class="ds-provider">Turkish Ministry of Agriculture and Forestry — TAGEM</span>
+      </div>
+      <p class="docs-p">
+        Itemised agricultural production cost surveys published by the Turkish Ministry of Agriculture and Forestry
+        (TAGEM) for the 2022 season. Costs cover seed, fertilizer, pesticide, fuel, machinery, labor, and overhead.
+        A <strong>CPI adjustment factor of 1.40</strong> is applied to convert 2022 USD costs to approximate 2024
+        values, reflecting Turkish agricultural input inflation.
+      </p>
+      <div class="ds-meta-grid">
+        <div class="ds-meta-item"><span class="ds-meta-label">Spatial resolution</span><span class="ds-meta-val">National (Turkey)</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">Reference year</span><span class="ds-meta-val">2022 → adjusted to 2024</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">CPI factor</span><span class="ds-meta-val">1.40</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">Table</span><span class="ds-meta-val">production_cost</span></div>
+      </div>
+      <p class="docs-p">
+        Cost categories stored per crop: seed, fertilizer, pesticide, fuel, machinery, labor, overhead.
+        All are surfaced in the cost breakdown card on the Yield &amp; Profit sidebar.
+      </p>
+    </div>
+
+    <!-- ── Crop requirements ── -->
+    <div class="ds-card">
+      <div class="ds-card-header">
+        <div class="ds-badge ds-badge-agro">Agronomy</div>
+        <h2 class="ds-title">Crop Requirements</h2>
+        <span class="ds-provider">FAO AgroEcological Zones + literature</span>
+      </div>
+      <p class="docs-p">
+        Monthly crop climate and soil requirements hand-compiled from FAO AgroEcological Zone guidelines and
+        peer-reviewed agronomy literature. Stored in the <code class="docs-code">crop_requirement</code> table.
+        Used by the ETL scoring engine to compute suitability via the trapezoidal fuzzy membership function.
+      </p>
+      <div class="ds-meta-grid">
+        <div class="ds-meta-item"><span class="ds-meta-label">Crops</span><span class="ds-meta-val">8</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">Features per crop</span><span class="ds-meta-val">temperature, precipitation, solar radiation, min temperature, soil pH</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">Temporal granularity</span><span class="ds-meta-val">Monthly (growing season only)</span></div>
+        <div class="ds-meta-item"><span class="ds-meta-label">Membership params</span><span class="ds-meta-val">req_min, req_optimal, req_max per month per feature</span></div>
+      </div>
+    </div>
+
+  </div><!-- /docs-inner -->
+</div><!-- /docs-page -->
+{% endblock %}
