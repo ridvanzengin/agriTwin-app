@@ -139,6 +139,9 @@ def get_scenario_status(scenario_id: int):
 
 @bp.delete("/scenarios/<int:scenario_id>")
 def delete_scenario(scenario_id: int):
+    if not current_app.config.get("SCENARIO_CREATION_ENABLED", False):
+        return jsonify({"error": "Scenario deletion is disabled in this deployment."}), 403
+
     with get_session() as session:
         result = session.execute(
             text("DELETE FROM scenario WHERE scenario_id = :id RETURNING scenario_id"),

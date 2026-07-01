@@ -5,12 +5,14 @@
 <div class="page-container">
   <div class="page-header">
     <h1 class="page-title">What-If Simulations</h1>
+    {% if creation_enabled %}
     <a href="{{ url_for('views.scenario_new_view') }}" class="btn btn-primary">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
         <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
       </svg>
       Create New Scenario
     </a>
+    {% endif %}
   </div>
 
   <div class="table-card">
@@ -35,6 +37,7 @@
 {% block scripts %}
 <script>
 const POLL_INTERVAL_MS = 3000;
+const CREATION_ENABLED = {{ creation_enabled | tojson }};
 let pollTimers = {};
 
 function statusBadge(status) {
@@ -75,12 +78,13 @@ function buildRow(s) {
             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
           </svg>
         </a>
+        ${CREATION_ENABLED ? `
         <button class="icon-btn icon-btn-danger" title="Delete"
                 onclick="deleteScenario(${s.scenario_id})">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
             <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
           </svg>
-        </button>
+        </button>` : ''}
       </td>
     </tr>`;
 }
