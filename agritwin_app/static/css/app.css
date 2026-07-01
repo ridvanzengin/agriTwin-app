@@ -142,12 +142,14 @@ body { display: flex; height: 100vh; }
   flex-shrink: 0;
 }
 
-.nav-version {
+.nav-attribution {
   font-size: 11px;
   color: var(--text-muted);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  text-decoration: none;
+  display: block;
+}
+.nav-attribution:hover {
+  color: var(--text-secondary);
 }
 
 /* ─── Inline feature-select radio labels inside attr-grid ──────────────── */
