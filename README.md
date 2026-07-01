@@ -4,7 +4,7 @@ The web application layer of [AgriTwin](https://github.com/ridvanzengin/agritwin
 
 ![AgriTwin Field Explorer](docs/screenshot.png)
 
-**[Live Demo →](http://167.233.143.105)**
+**[Live Demo →](http://agritwin.online)**
 
 ## Features
 
