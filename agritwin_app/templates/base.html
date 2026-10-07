@@ -17,8 +17,30 @@
 </head>
 <body>
 
-  <!-- ── Left navigation bar ── -->
-  <nav class="nav-sidebar" aria-label="Main navigation">
+  <!-- ── Mobile top bar (≤ 640px only) ──
+       The hamburger is a standalone fixed element rather than a child of
+       .mobile-topbar, so it stays reachable above full-screen detail panels. -->
+  <button type="button" id="mobile-menu-btn" class="mobile-menu-btn" aria-label="Open menu" aria-controls="nav-sidebar" aria-expanded="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <line x1="4" y1="6" x2="20" y2="6"/>
+      <line x1="4" y1="12" x2="20" y2="12"/>
+      <line x1="4" y1="18" x2="20" y2="18"/>
+    </svg>
+  </button>
+  <div class="mobile-topbar">
+    <a href="{{ url_for('views.map_view') }}" class="mobile-topbar-brand">
+      <svg class="mobile-topbar-logo" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="32" height="32" rx="6" fill="#22c55e"/>
+        <path d="M8 22 Q12 10 16 14 Q20 18 24 8" stroke="white" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+        <circle cx="16" cy="14" r="2.5" fill="white"/>
+      </svg>
+      <span>AgriTwin</span>
+    </a>
+  </div>
+  <div id="nav-backdrop" class="nav-backdrop" hidden></div>
+
+  <!-- ── Left navigation bar (off-canvas drawer on mobile) ── -->
+  <nav id="nav-sidebar" class="nav-sidebar" aria-label="Main navigation">
     <div class="nav-brand">
       <svg class="nav-logo" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect width="32" height="32" rx="6" fill="#22c55e"/>
@@ -26,6 +48,12 @@
         <circle cx="16" cy="14" r="2.5" fill="white"/>
       </svg>
       <span class="nav-brand-text">AgriTwin</span>
+      <button type="button" id="nav-close-btn" class="nav-close-btn" aria-label="Close menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
     </div>
 
     <!-- Scrollable area: nav items + page-specific extras (e.g. layer selector) -->
@@ -133,6 +161,7 @@
     {% block content %}{% endblock %}
   </main>
 
+  <script src="{{ url_for('static', filename='js/nav.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
