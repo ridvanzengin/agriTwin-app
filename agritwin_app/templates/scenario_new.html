@@ -114,6 +114,20 @@
     width: fit-content;
   }
   .btn-redraw:hover { border-color: #ef4444; color: #ef4444; }
+
+  /* Mobile: stack map above form instead of the 60/40 side-by-side split */
+  @media (max-width: 640px) {
+    #scenario-new-layout { flex-direction: column; }
+    #draw-map { flex: 0 0 45%; height: auto; }
+    #scenario-form-panel {
+      flex: 1 1 auto;
+      min-height: 0;
+      height: auto;
+      padding: 1rem;
+      border-left: none;
+      border-top: 1px solid var(--border-color, #334155);
+    }
+  }
 </style>
 {% endblock %}
 

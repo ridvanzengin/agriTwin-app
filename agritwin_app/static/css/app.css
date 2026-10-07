@@ -1109,3 +1109,144 @@ body { display: flex; height: 100vh; }
   padding: 0.5rem 0 0.25rem;
   height: 220px;
 }
+
+/* ─── Mobile (≤ 640px) ──────────────────────────────────────────────────── */
+/* One phone-sized breakpoint for the whole app (mirrors nav.js MOBILE_QUERY).
+   The left nav becomes an off-canvas drawer behind a fixed 52px top bar, and
+   the right-hand detail panels become full-width overlays below that bar. */
+:root { --mobile-topbar-height: 52px; }
+
+.mobile-menu-btn,
+.mobile-topbar,
+.nav-close-btn { display: none; }
+
+.nav-backdrop[hidden] { display: none; }
+
+@media (max-width: 640px) {
+  body {
+    display: block;
+    height: 100dvh;
+  }
+
+  .main-content {
+    height: 100dvh;
+    padding-top: var(--mobile-topbar-height);
+  }
+
+  /* Top bar: brand row, leaving the left 52px for the standalone hamburger */
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    position: fixed;
+    top: 0;
+    left: var(--mobile-topbar-height);
+    right: 0;
+    height: var(--mobile-topbar-height);
+    padding: 0 8px;
+    background: var(--nav-bg);
+    border-bottom: 1px solid var(--nav-border);
+    z-index: 40;
+  }
+
+  .mobile-topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .mobile-topbar-logo { width: 24px; height: 24px; flex-shrink: 0; }
+
+  /* Its own fixed element (not a .mobile-topbar child) so its z-index can sit
+     above the full-screen panels instead of being capped by the bar's stacking
+     context. */
+  .mobile-menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: var(--mobile-topbar-height);
+    height: var(--mobile-topbar-height);
+    border: none;
+    border-bottom: 1px solid var(--nav-border);
+    background: var(--nav-bg);
+    color: var(--text-primary);
+    cursor: pointer;
+    z-index: 46;
+  }
+
+  .mobile-menu-btn svg { width: 20px; height: 20px; }
+
+  .nav-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 48;
+  }
+
+  .nav-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 260px;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform var(--transition);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  }
+
+  .nav-open .nav-sidebar { transform: translateX(0); }
+
+  .nav-close-btn {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+    padding: 4px;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+
+  .nav-close-btn:hover { color: var(--text-primary); background: var(--card-bg); }
+  .nav-close-btn svg { width: 18px; height: 18px; }
+
+  /* Detail panels: full-width overlay under the top bar. !important beats the
+     inline width the desktop drag-resize restores from localStorage. */
+  .cell-panel,
+  .suit-panel {
+    position: fixed;
+    top: var(--mobile-topbar-height);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100% !important;
+    border-left: none;
+    z-index: 45;
+  }
+
+  .panel-resize-handle { display: none; }
+
+  /* Bigger tap target for closing the panel */
+  .panel-close { padding: 8px; }
+
+  /* Scenario list / docs / data sources */
+  .page-container { padding: 16px; }
+  .page-header { flex-wrap: wrap; gap: 12px; }
+  .table-card { overflow-x: auto; }
+  .data-table { min-width: 560px; }
+
+  .docs-page { padding: 24px 16px; }
+  .docs-title { font-size: 22px; }
+  .docs-stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .docs-table { display: block; overflow-x: auto; }
+  .ds-meta-grid { grid-template-columns: 1fr; }
+  .docs-feature-header { flex-wrap: wrap; }
+}
