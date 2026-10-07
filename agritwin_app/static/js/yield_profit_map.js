@@ -4,21 +4,7 @@ const YP_TURKEY_CENTER   = [35.5, 39.0];
 const YP_INITIAL_ZOOM    = 6;
 const YP_ZOOM_THRESHOLD  = 11;
 
-const YP_TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
-
-const YP_LIGHT_STYLE = {
-    version: 8,
-    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
-    sources: {
-        'carto-basemap': {
-            type: 'raster',
-            tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'],
-            tileSize: 256,
-            attribution: YP_TILE_ATTR,
-        },
-    },
-    layers: [{ id: 'background', type: 'raster', source: 'carto-basemap' }],
-};
+const YP_LIGHT_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 
 window.ypCurrentCrop = 'Wheat';
 

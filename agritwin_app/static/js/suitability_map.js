@@ -4,21 +4,7 @@ const TURKEY_CENTER      = [35.5, 39.0];
 const INITIAL_ZOOM       = 6;
 const SUIT_ZOOM_THRESHOLD = 11;   // below → clusters; at/above → res-9 polygons
 
-const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
-
-const LIGHT_STYLE = {
-    version: 8,
-    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
-    sources: {
-        'carto-basemap': {
-            type: 'raster',
-            tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'],
-            tileSize: 256,
-            attribution: TILE_ATTR,
-        },
-    },
-    layers: [{ id: 'background', type: 'raster', source: 'carto-basemap' }],
-};
+const LIGHT_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 
 window.currentCrop = 'Wheat';
 
